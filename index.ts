@@ -5,16 +5,11 @@ import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
 
-// Connection store — env vars as default, overridable via connect-openclaw tool
+// In-memory connection store — each user enters their own credentials via setup screen
 let currentConnection: GatewayOverrides | null = null;
 
 function getConnection(): GatewayOverrides | null {
-  if (currentConnection) return currentConnection;
-  const url = process.env.OPENCLAW_GATEWAY_URL;
-  if (url) {
-    return { gatewayUrl: url, gatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN };
-  }
-  return null;
+  return currentConnection;
 }
 
 const server = new MCPServer({
