@@ -1,8 +1,8 @@
 {
-  "name": "hack-yc",
+  "name": "claw-use",
   "type": "module",
   "version": "1.0.0",
-  "description": "MCP server: hack-yc",
+  "description": "OpenClaw Dashboard — Agent task management via MCP Apps",
   "author": "",
   "license": "MIT",
   "keywords": [

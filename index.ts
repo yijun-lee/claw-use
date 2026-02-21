@@ -1,14 +1,17 @@
 import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
+import { OpenClawClient } from "./lib/openclaw-client.js";
+
+const client = new OpenClawClient();
 
 const server = new MCPServer({
-  name: "hack-yc",
-  title: "hack-yc", // display name
+  name: "claw-use",
+  title: "OpenClaw Dashboard",
   version: "1.0.0",
-  description: "MCP server with MCP Apps integration",
-  baseUrl: process.env.MCP_URL || "http://localhost:3000", // Full base URL (e.g., https://myserver.com)
+  description: "OpenClaw agent task dashboard — manage tasks, monitor metrics, and control agent workflows",
+  baseUrl: process.env.MCP_URL || "http://localhost:3000",
   favicon: "favicon.ico",
-  websiteUrl: "https://mcp-use.com", // Can be customized later
+  websiteUrl: "https://openclaw.io",
   icons: [
     {
       src: "icon.svg",
@@ -18,91 +21,143 @@ const server = new MCPServer({
   ],
 });
 
-/**
- * TOOL THAT RETURNS A WIDGET
- * The `widget` config tells mcp-use which widget component to render.
- * The `widget()` helper in the handler passes props to that component.
- * Docs: https://mcp-use.com/docs/typescript/server/mcp-apps
- */
-
-// Fruits data — color values are Tailwind bg-[] classes used by the carousel UI
-const fruits = [
-  { fruit: "mango", color: "bg-[#FBF1E1] dark:bg-[#FBF1E1]/10" },
-  { fruit: "pineapple", color: "bg-[#f8f0d9] dark:bg-[#f8f0d9]/10" },
-  { fruit: "cherries", color: "bg-[#E2EDDC] dark:bg-[#E2EDDC]/10" },
-  { fruit: "coconut", color: "bg-[#fbedd3] dark:bg-[#fbedd3]/10" },
-  { fruit: "apricot", color: "bg-[#fee6ca] dark:bg-[#fee6ca]/10" },
-  { fruit: "blueberry", color: "bg-[#e0e6e6] dark:bg-[#e0e6e6]/10" },
-  { fruit: "grapes", color: "bg-[#f4ebe2] dark:bg-[#f4ebe2]/10" },
-  { fruit: "watermelon", color: "bg-[#e6eddb] dark:bg-[#e6eddb]/10" },
-  { fruit: "orange", color: "bg-[#fdebdf] dark:bg-[#fdebdf]/10" },
-  { fruit: "avocado", color: "bg-[#ecefda] dark:bg-[#ecefda]/10" },
-  { fruit: "apple", color: "bg-[#F9E7E4] dark:bg-[#F9E7E4]/10" },
-  { fruit: "pear", color: "bg-[#f1f1cf] dark:bg-[#f1f1cf]/10" },
-  { fruit: "plum", color: "bg-[#ece5ec] dark:bg-[#ece5ec]/10" },
-  { fruit: "banana", color: "bg-[#fdf0dd] dark:bg-[#fdf0dd]/10" },
-  { fruit: "strawberry", color: "bg-[#f7e6df] dark:bg-[#f7e6df]/10" },
-  { fruit: "lemon", color: "bg-[#feeecd] dark:bg-[#feeecd]/10" },
-];
-
+// Tool 1: get-dashboard — renders the dashboard widget
 server.tool(
   {
-    name: "search-tools",
-    description: "Search for fruits and display the results in a visual widget",
+    name: "get-dashboard",
+    description: "OpenClaw 작업 대시보드를 표시합니다. 칸반 보드와 메트릭 요약을 포함합니다.",
     schema: z.object({
-      query: z.string().optional().describe("Search query to filter fruits"),
+      filter: z
+        .enum(["all", "heartbeat", "backlog", "todo", "in-progress", "done"])
+        .optional()
+        .describe("특정 상태의 작업만 필터링"),
     }),
     widget: {
-      name: "product-search-result",
-      invoking: "Searching...",
-      invoked: "Results loaded",
+      name: "dashboard",
+      invoking: "Loading dashboard...",
+      invoked: "Dashboard ready",
     },
+    annotations: { readOnlyHint: true },
   },
-  async ({ query }) => {
-    const results = fruits.filter(
-      (f) => !query || f.fruit.toLowerCase().includes(query.toLowerCase())
-    );
+  async ({ filter }) => {
+    const data = await client.getDashboard(filter);
+    const { metrics, tasks } = data;
 
-    // let's emulate a delay to show the loading state
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const byStatus = (s: string) => tasks.filter((t) => t.status === s).length;
 
     return widget({
-      props: { query: query ?? "", results },
+      props: {
+        tasks,
+        metrics,
+        lastUpdated: data.lastUpdated,
+        activeFilter: filter ?? "all",
+      },
       output: text(
-        `Found ${results.length} fruits matching "${query ?? "all"}"`
+        [
+          `Dashboard loaded (${tasks.length} tasks)`,
+          `Heartbeat: ${byStatus("heartbeat")} | Backlog: ${byStatus("backlog")} | To-Do: ${byStatus("todo")} | In Progress: ${byStatus("in-progress")} | Done: ${byStatus("done")}`,
+          `Tokens: ${metrics.totalTokens.toLocaleString()} ($${metrics.estimatedCostUSD.toFixed(2)}) | Success: ${metrics.successRate}% | Avg Response: ${metrics.avgResponseTimeMs}ms`,
+        ].join("\n")
       ),
     });
   }
 );
 
+// Tool 2: update-task — backend tool for modifying tasks
 server.tool(
   {
-    name: "get-fruit-details",
-    description: "Get detailed information about a specific fruit",
+    name: "update-task",
+    description: "작업의 상태, 제목, 설명, 담당자, 우선순위를 수정하거나 피드백을 추가합니다.",
     schema: z.object({
-      fruit: z.string().describe("The fruit name"),
-    }),
-    outputSchema: z.object({
-      fruit: z.string(),
-      color: z.string(),
-      facts: z.array(z.string()),
+      taskId: z.string().describe("수정할 작업 ID"),
+      status: z
+        .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
+        .optional()
+        .describe("새로운 상태"),
+      title: z.string().optional().describe("새로운 제목"),
+      description: z.string().optional().describe("새로운 설명"),
+      feedback: z.string().optional().describe("추가할 피드백 메시지"),
+      assignee: z.string().optional().describe("새로운 담당자"),
+      priority: z
+        .enum(["low", "medium", "high", "critical"])
+        .optional()
+        .describe("새로운 우선순위"),
     }),
   },
-  async ({ fruit }) => {
-    const found = fruits.find(
-      (f) => f.fruit?.toLowerCase() === fruit?.toLowerCase()
-    );
+  async (params) => {
+    const updated = await client.updateTask(params);
     return object({
-      fruit: found?.fruit ?? fruit,
-      color: found?.color ?? "unknown",
-      facts: [
-        `${fruit} is a delicious fruit`,
-        `Color: ${found?.color ?? "unknown"}`,
-      ],
+      success: true,
+      task: updated,
+    });
+  }
+);
+
+// Tool 3: create-task — backend tool for creating new tasks
+server.tool(
+  {
+    name: "create-task",
+    description: "새로운 작업을 생성합니다.",
+    schema: z.object({
+      title: z.string().describe("작업 제목"),
+      description: z.string().optional().describe("작업 설명"),
+      status: z
+        .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
+        .optional()
+        .describe("초기 상태 (기본: backlog)"),
+      priority: z
+        .enum(["low", "medium", "high", "critical"])
+        .optional()
+        .describe("우선순위 (기본: medium)"),
+      assignee: z.string().optional().describe("담당자"),
+    }),
+  },
+  async (params) => {
+    const created = await client.createTask(params);
+    return object({
+      success: true,
+      task: created,
+    });
+  }
+);
+
+// Tool 4: get-metrics — backend tool for metrics analysis
+server.tool(
+  {
+    name: "get-metrics",
+    description: "에이전트 성능 메트릭을 조회합니다. 토큰 사용량, 성공률, 응답시간 등을 포함합니다.",
+    schema: z.object({}),
+    annotations: { readOnlyHint: true },
+  },
+  async () => {
+    const metrics = await client.getMetrics();
+    return object({ ...metrics });
+  }
+);
+
+// Tool 5: refresh-dashboard — widget-callable refresh
+server.tool(
+  {
+    name: "refresh-dashboard",
+    description: "대시보드 데이터를 새로고침합니다. 위젯에서 호출됩니다.",
+    schema: z.object({
+      filter: z
+        .enum(["all", "heartbeat", "backlog", "todo", "in-progress", "done"])
+        .optional()
+        .describe("필터 상태"),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ filter }) => {
+    const data = await client.getDashboard(filter);
+    return object({
+      tasks: data.tasks,
+      metrics: data.metrics,
+      lastUpdated: data.lastUpdated,
     });
   }
 );
 
 server.listen().then(() => {
-  console.log(`Server running`);
+  console.log("OpenClaw Dashboard server running");
 });
