@@ -1,11 +1,19 @@
 import type {
   DashboardData,
+  HookAgentResponse,
   MetricsSummary,
+  OpenClawSession,
   Task,
   TaskCreateInput,
   TaskStatus,
   TaskUpdate,
+  ToolInvokeResponse,
 } from "./types.js";
+import { OpenClawApiError } from "./types.js";
+
+// ---------------------------------------------------------------------------
+// Mock data (used when OPENCLAW_MOCK !== "false")
+// ---------------------------------------------------------------------------
 
 const MOCK_TASKS: Task[] = [
   // Heartbeat
@@ -214,25 +222,174 @@ let tasks = [...MOCK_TASKS];
 
 const STATUS_ORDER: TaskStatus[] = ["heartbeat", "backlog", "todo", "in-progress", "done"];
 
+// ---------------------------------------------------------------------------
+// Environment helpers
+// ---------------------------------------------------------------------------
+
 function isMock(): boolean {
   return process.env.OPENCLAW_MOCK !== "false";
 }
 
-function getApiUrl(): string {
-  return process.env.OPENCLAW_API_URL || "https://api.openclaw.io";
+function getGatewayUrl(): string {
+  return process.env.OPENCLAW_GATEWAY_URL || "http://127.0.0.1:18789";
+}
+
+function getGatewayToken(): string | undefined {
+  return process.env.OPENCLAW_GATEWAY_TOKEN;
+}
+
+function getAgentId(): string {
+  return process.env.OPENCLAW_AGENT_ID || "main";
 }
 
 function getAuthHeaders(): Record<string, string> {
-  const token = process.env.OPENCLAW_AUTH_TOKEN;
+  const token = getGatewayToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+// ---------------------------------------------------------------------------
+// Session → Task mapping
+// ---------------------------------------------------------------------------
+
+const ACTIVE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+function inferStatus(session: OpenClawSession): TaskStatus {
+  const updatedAt = new Date(session.updatedAt).getTime();
+  const age = Date.now() - updatedAt;
+
+  if (age < ACTIVE_THRESHOLD_MS) return "in-progress";
+  if (age < STALE_THRESHOLD_MS) return "todo";
+  return "done";
+}
+
+function mapSessionToTask(session: OpenClawSession): Task {
+  return {
+    id: session.sessionKey,
+    title: session.displayName || session.subject || session.sessionKey,
+    description: session.subject || "",
+    status: inferStatus(session),
+    priority: "medium",
+    assignee: session.channel || "unassigned",
+    createdAt: session.updatedAt, // sessions_list doesn't expose createdAt
+    updatedAt: session.updatedAt,
+    feedback: [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Client
+// ---------------------------------------------------------------------------
+
 export class OpenClawClient {
+  // --- Gateway HTTP helpers ------------------------------------------------
+
+  private async invokeGatewayTool(
+    tool: string,
+    args?: Record<string, unknown>,
+  ): Promise<ToolInvokeResponse> {
+    const url = `${getGatewayUrl()}/tools/invoke`;
+    const body: Record<string, unknown> = { tool };
+    if (args) body.args = args;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      await this.handleHttpError(res);
+    }
+
+    return (await res.json()) as ToolInvokeResponse;
+  }
+
+  private async sendHookAgent(
+    message: string,
+    opts?: { agentId?: string },
+  ): Promise<HookAgentResponse> {
+    const url = `${getGatewayUrl()}/hooks/agent`;
+    const agentId = opts?.agentId || getAgentId();
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ agentId, message }),
+    });
+
+    if (!res.ok) {
+      await this.handleHttpError(res);
+    }
+
+    // 202 Accepted — may have no body
+    if (res.status === 202 || res.headers.get("content-length") === "0") {
+      return { ok: true };
+    }
+
+    return (await res.json()) as HookAgentResponse;
+  }
+
+  private async handleHttpError(res: Response): Promise<never> {
+    // Rate limit — respect Retry-After
+    if (res.status === 429) {
+      const retryAfter = res.headers.get("Retry-After");
+      throw new OpenClawApiError(
+        429,
+        "RATE_LIMITED",
+        `Rate limited. Retry after ${retryAfter ?? "unknown"} seconds.`,
+      );
+    }
+
+    let errorBody = "";
+    try {
+      errorBody = await res.text();
+    } catch {
+      // ignore read errors
+    }
+
+    const codeMap: Record<number, string> = {
+      401: "UNAUTHORIZED",
+      403: "FORBIDDEN",
+      404: "NOT_FOUND",
+      500: "INTERNAL_ERROR",
+    };
+
+    throw new OpenClawApiError(
+      res.status,
+      codeMap[res.status] || "HTTP_ERROR",
+      `Gateway responded with ${res.status}: ${errorBody || res.statusText}`,
+    );
+  }
+
+  // --- Fetching sessions from Gateway --------------------------------------
+
+  private async fetchSessions(): Promise<OpenClawSession[]> {
+    const response = await this.invokeGatewayTool("sessions_list");
+    if (!response.ok || !response.result) {
+      throw new OpenClawApiError(
+        502,
+        "GATEWAY_ERROR",
+        response.error?.message || "sessions_list returned an error",
+      );
+    }
+    return response.result as OpenClawSession[];
+  }
+
+  // --- Public API (same interface as before) --------------------------------
+
   async getDashboard(filter?: string): Promise<DashboardData> {
     if (isMock()) {
-      const filtered = filter && filter !== "all"
-        ? tasks.filter((t) => t.status === filter)
-        : tasks;
+      const filtered =
+        filter && filter !== "all"
+          ? tasks.filter((t) => t.status === filter)
+          : tasks;
       return {
         tasks: filtered,
         metrics: MOCK_METRICS,
@@ -240,28 +397,74 @@ export class OpenClawClient {
       };
     }
 
-    const url = new URL("/api/stats", getApiUrl());
-    if (filter && filter !== "all") url.searchParams.set("filter", filter);
-    const res = await fetch(url.toString(), { headers: getAuthHeaders() });
-    return res.json() as Promise<DashboardData>;
+    const sessions = await this.fetchSessions();
+    let mappedTasks = sessions.map(mapSessionToTask);
+
+    if (filter && filter !== "all") {
+      mappedTasks = mappedTasks.filter((t) => t.status === filter);
+    }
+
+    const metrics = this.computeMetrics(sessions, mappedTasks);
+
+    return {
+      tasks: mappedTasks,
+      metrics,
+      lastUpdated: new Date().toISOString(),
+    };
   }
 
   async getTasks(): Promise<Task[]> {
     if (isMock()) return tasks;
 
-    const res = await fetch(new URL("/api/tasks", getApiUrl()).toString(), {
-      headers: getAuthHeaders(),
-    });
-    return res.json() as Promise<Task[]>;
+    const sessions = await this.fetchSessions();
+    return sessions.map(mapSessionToTask);
   }
 
   async getMetrics(): Promise<MetricsSummary> {
     if (isMock()) return MOCK_METRICS;
 
-    const res = await fetch(new URL("/api/tokens", getApiUrl()).toString(), {
-      headers: getAuthHeaders(),
-    });
-    return res.json() as Promise<MetricsSummary>;
+    const sessions = await this.fetchSessions();
+    const mappedTasks = sessions.map(mapSessionToTask);
+    return this.computeMetrics(sessions, mappedTasks);
+  }
+
+  async createTask(input: TaskCreateInput): Promise<Task> {
+    if (isMock()) {
+      const newTask: Task = {
+        id: `task-${Date.now()}`,
+        title: input.title,
+        description: input.description || "",
+        status: input.status || "backlog",
+        priority: input.priority || "medium",
+        assignee: input.assignee || "unassigned",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        feedback: [],
+      };
+      tasks.push(newTask);
+      return newTask;
+    }
+
+    const parts = [`Create task: ${input.title}`];
+    if (input.description) parts.push(`Description: ${input.description}`);
+    if (input.priority) parts.push(`Priority: ${input.priority}`);
+    if (input.assignee) parts.push(`Assignee: ${input.assignee}`);
+    if (input.status) parts.push(`Status: ${input.status}`);
+
+    await this.sendHookAgent(parts.join("\n"));
+
+    // Hook is async (202); return an optimistic task object
+    return {
+      id: `pending-${Date.now()}`,
+      title: input.title,
+      description: input.description || "",
+      status: input.status || "backlog",
+      priority: input.priority || "medium",
+      assignee: input.assignee || "unassigned",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      feedback: [],
+    };
   }
 
   async updateTask(update: TaskUpdate): Promise<Task> {
@@ -291,41 +494,40 @@ export class OpenClawClient {
       return task;
     }
 
-    const res = await fetch(
-      new URL(`/api/tasks/${update.taskId}`, getApiUrl()).toString(),
-      {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        body: JSON.stringify(update),
-      }
-    );
-    return res.json() as Promise<Task>;
+    const parts = [`Update task ${update.taskId}:`];
+    if (update.status) parts.push(`Status → ${update.status}`);
+    if (update.title) parts.push(`Title → ${update.title}`);
+    if (update.description) parts.push(`Description → ${update.description}`);
+    if (update.assignee) parts.push(`Assignee → ${update.assignee}`);
+    if (update.priority) parts.push(`Priority → ${update.priority}`);
+    if (update.feedback) parts.push(`Feedback: ${update.feedback}`);
+
+    await this.sendHookAgent(parts.join("\n"));
+
+    // Hook is async; return optimistic update
+    return {
+      id: update.taskId,
+      title: update.title || update.taskId,
+      description: update.description || "",
+      status: update.status || "todo",
+      priority: update.priority || "medium",
+      assignee: update.assignee || "unassigned",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      feedback: update.feedback
+        ? [
+            {
+              id: `fb-${Date.now()}`,
+              author: "user",
+              message: update.feedback,
+              createdAt: new Date().toISOString(),
+            },
+          ]
+        : [],
+    };
   }
 
-  async createTask(input: TaskCreateInput): Promise<Task> {
-    if (isMock()) {
-      const newTask: Task = {
-        id: `task-${Date.now()}`,
-        title: input.title,
-        description: input.description || "",
-        status: input.status || "backlog",
-        priority: input.priority || "medium",
-        assignee: input.assignee || "unassigned",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        feedback: [],
-      };
-      tasks.push(newTask);
-      return newTask;
-    }
-
-    const res = await fetch(new URL("/api/tasks", getApiUrl()).toString(), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify(input),
-    });
-    return res.json() as Promise<Task>;
-  }
+  // --- Status navigation (unchanged) --------------------------------------
 
   getNextStatus(current: TaskStatus): TaskStatus | null {
     const idx = STATUS_ORDER.indexOf(current);
@@ -335,5 +537,25 @@ export class OpenClawClient {
   getPrevStatus(current: TaskStatus): TaskStatus | null {
     const idx = STATUS_ORDER.indexOf(current);
     return idx > 0 ? STATUS_ORDER[idx - 1] : null;
+  }
+
+  // --- Metrics aggregation -------------------------------------------------
+
+  private computeMetrics(
+    sessions: OpenClawSession[],
+    mappedTasks: Task[],
+  ): MetricsSummary {
+    const total = mappedTasks.length;
+    const completed = mappedTasks.filter((t) => t.status === "done").length;
+    const active = mappedTasks.filter((t) => t.status === "in-progress").length;
+
+    return {
+      totalTokens: 0, // not available from sessions_list
+      estimatedCostUSD: 0,
+      successRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      avgResponseTimeMs: 0,
+      totalTasks: total,
+      completedTasks: completed,
+    };
   }
 }

@@ -53,3 +53,37 @@ export interface TaskCreateInput {
   priority?: TaskPriority;
   assignee?: string;
 }
+
+// --- OpenClaw Gateway raw response types ---
+
+export interface OpenClawSession {
+  sessionId: string;
+  sessionKey: string;
+  updatedAt: string;
+  displayName?: string;
+  channel?: string;
+  subject?: string;
+  origin?: Record<string, unknown>;
+}
+
+export interface ToolInvokeResponse {
+  ok: boolean;
+  result?: unknown;
+  error?: { type: string; message: string };
+}
+
+export interface HookAgentResponse {
+  // 202 Accepted — async, typically no body
+  ok?: boolean;
+}
+
+export class OpenClawApiError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "OpenClawApiError";
+  }
+}
