@@ -112,6 +112,35 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
+// Tool 2b: demo-connect — use the built-in OpenClaw demo instance
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "demo-connect",
+    description: "Connect to the OpenClaw demo instance for a quick test drive.",
+    schema: z.object({}),
+  },
+  async () => {
+    const demoUrl = process.env.OPENCLAW_GATEWAY_URL;
+    const demoToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+    if (!demoUrl) {
+      return text("Demo instance is not configured.");
+    }
+
+    currentConnection = { gatewayUrl: demoUrl, gatewayToken: demoToken };
+    const data = await client.getDashboard(currentConnection);
+
+    return object({
+      success: true,
+      tasks: data.tasks,
+      metrics: data.metrics,
+      lastUpdated: data.lastUpdated,
+    });
+  }
+);
+
+// ---------------------------------------------------------------------------
 // Tool 3: update-task — backend tool for modifying tasks
 // ---------------------------------------------------------------------------
 

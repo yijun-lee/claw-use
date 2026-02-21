@@ -47,6 +47,7 @@ const DEFAULT_METRICS: MetricsData = {
 type RefreshArgs = { filter?: string } | null;
 type UpdateArgs = Record<string, unknown> | null;
 type ConnectArgs = { gatewayUrl: string; gatewayToken?: string } | null;
+type DemoArgs = Record<string, never> | null;
 
 // ---------------------------------------------------------------------------
 // Setup Screen — shown when no Gateway URL is configured
@@ -63,6 +64,40 @@ const SetupScreen: React.FC<{
     callToolAsync: connectAsync,
     isPending: isConnecting,
   } = useCallTool<ConnectArgs>("connect-openclaw");
+
+  const {
+    callToolAsync: demoConnectAsync,
+    isPending: isDemoConnecting,
+  } = useCallTool<DemoArgs>("demo-connect");
+
+  const isLoading = isConnecting || isDemoConnecting;
+
+  const handleDemoConnect = useCallback(async () => {
+    setError(null);
+    try {
+      const result = await demoConnectAsync(null);
+      if (result?.structuredContent) {
+        const data = result.structuredContent as unknown as {
+          success: boolean;
+          tasks: TaskItem[];
+          metrics: MetricsData;
+          lastUpdated: string;
+        };
+        if (data.success) {
+          onConnected({
+            screen: "dashboard",
+            tasks: data.tasks,
+            metrics: data.metrics,
+            lastUpdated: data.lastUpdated,
+          });
+          return;
+        }
+      }
+      setError("Demo connection failed. Please try again.");
+    } catch {
+      setError("Demo connection failed. Please try again.");
+    }
+  }, [demoConnectAsync, onConnected]);
 
   const handleConnect = useCallback(async () => {
     if (!gatewayUrl.trim()) {
@@ -111,54 +146,75 @@ const SetupScreen: React.FC<{
         </div>
 
         <h2 className="text-lg font-bold text-default mb-1">Connect to OpenClaw</h2>
-        <p className="text-sm text-secondary mb-6 max-w-sm">
-          Enter your OpenClaw Gateway URL to connect your dashboard to your agent cluster.
+        <p className="text-sm text-secondary mb-5 max-w-sm">
+          Try the demo or connect your own agent cluster.
         </p>
 
-        {/* Form */}
-        <div className="w-full max-w-md space-y-3">
-          <div className="text-left">
-            <label className="block text-xs font-medium text-secondary mb-1">
-              Gateway URL <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="url"
-              value={gatewayUrl}
-              onChange={(e) => setGatewayUrl(e.target.value)}
-              placeholder="https://your-gateway.example.com"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
-              disabled={isConnecting}
-            />
-          </div>
-
-          <div className="text-left">
-            <label className="block text-xs font-medium text-secondary mb-1">
-              Auth Token <span className="text-tertiary">(optional)</span>
-            </label>
-            <input
-              type="password"
-              value={gatewayToken}
-              onChange={(e) => setGatewayToken(e.target.value)}
-              placeholder="Bearer token for authenticated gateways"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
-              disabled={isConnecting}
-            />
-          </div>
-
-          {error && (
-            <p className="text-xs text-red-400 text-left">{error}</p>
-          )}
-
+        <div className="w-full max-w-md space-y-4">
+          {/* Demo button */}
           <Button
             color="primary"
             size="lg"
             variant="solid"
-            onClick={handleConnect}
-            disabled={isConnecting || !gatewayUrl.trim()}
-            className="w-full mt-2"
+            onClick={handleDemoConnect}
+            disabled={isLoading}
+            className="w-full"
           >
-            {isConnecting ? "Connecting..." : "Connect"}
+            {isDemoConnecting ? "Connecting..." : "Try Demo"}
           </Button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-default" />
+            <span className="text-xs text-tertiary">or connect your own</span>
+            <div className="flex-1 border-t border-default" />
+          </div>
+
+          {/* Form */}
+          <div className="space-y-3">
+            <div className="text-left">
+              <label className="block text-xs font-medium text-secondary mb-1">
+                Gateway URL <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="url"
+                value={gatewayUrl}
+                onChange={(e) => setGatewayUrl(e.target.value)}
+                placeholder="https://your-gateway.example.com"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="text-left">
+              <label className="block text-xs font-medium text-secondary mb-1">
+                Auth Token <span className="text-tertiary">(optional)</span>
+              </label>
+              <input
+                type="password"
+                value={gatewayToken}
+                onChange={(e) => setGatewayToken(e.target.value)}
+                placeholder="Bearer token for authenticated gateways"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
+                disabled={isLoading}
+              />
+            </div>
+
+            {error && (
+              <p className="text-xs text-red-400 text-left">{error}</p>
+            )}
+
+            <Button
+              color="secondary"
+              size="lg"
+              variant="outline"
+              onClick={handleConnect}
+              disabled={isLoading || !gatewayUrl.trim()}
+              className="w-full"
+            >
+              {isConnecting ? "Connecting..." : "Connect"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
