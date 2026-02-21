@@ -1,22 +1,18 @@
-import { MCPServer, oauthCustomProvider, object, text, widget } from "mcp-use/server";
-import { randomUUID } from "node:crypto";
+import { MCPServer, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { OpenClawClient } from "./lib/openclaw-client.js";
-import { getUserSettings, saveUserSettings } from "./lib/supabase.js";
 import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
 
-const projectId = process.env.MCP_USE_OAUTH_SUPABASE_PROJECT_ID!;
-const supabaseUrl = `https://${projectId}.supabase.co`;
-const baseUrl = process.env.MCP_URL || "http://localhost:3000";
+// In-memory connection store (keyed by session — single-server hackathon mode)
+let currentConnection: GatewayOverrides | null = null;
 
 const server = new MCPServer({
   name: "claw-use",
   title: "OpenClaw Dashboard",
   version: "1.0.0",
   description: "OpenClaw agent task dashboard — manage tasks, monitor metrics, and control agent workflows",
-  baseUrl,
   favicon: "favicon.ico",
   websiteUrl: "https://openclaw.io",
   icons: [
@@ -26,84 +22,7 @@ const server = new MCPServer({
       sizes: ["512x512"],
     },
   ],
-  oauth: oauthCustomProvider({
-    issuer: `${supabaseUrl}/auth/v1`,
-    jwksUrl: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
-    authEndpoint: `${supabaseUrl}/auth/v1/authorize`,
-    tokenEndpoint: `${supabaseUrl}/auth/v1/token`,
-    scopesSupported: [],
-    grantTypesSupported: ["authorization_code", "refresh_token"],
-    verifyToken: async (token: string) => {
-      const [, payloadB64] = token.split(".");
-      const payload = JSON.parse(
-        Buffer.from(payloadB64, "base64url").toString(),
-      );
-      return { payload };
-    },
-    getUserInfo: (payload: Record<string, unknown>) => ({
-      userId: payload.sub as string,
-      email: payload.email as string,
-    }),
-  }),
 });
-
-// ---------------------------------------------------------------------------
-// Dynamic Client Registration (RFC 7591) — required by MCP spec
-// ---------------------------------------------------------------------------
-
-server.post("/register", async (c) => {
-  const body = await c.req.json();
-  return c.json(
-    {
-      client_id: randomUUID(),
-      client_name: body.client_name || "mcp-client",
-      redirect_uris: body.redirect_uris || [],
-      grant_types: body.grant_types || ["authorization_code"],
-      response_types: body.response_types || ["code"],
-      token_endpoint_auth_method: body.token_endpoint_auth_method || "none",
-    },
-    201,
-  );
-});
-
-// Override auth server metadata to include registration_endpoint
-server.get("/.well-known/oauth-authorization-server", async (c) => {
-  return c.json({
-    issuer: `${supabaseUrl}/auth/v1`,
-    authorization_endpoint: `${baseUrl}/authorize`,
-    token_endpoint: `${baseUrl}/token`,
-    registration_endpoint: `${baseUrl}/register`,
-    response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
-    code_challenge_methods_supported: ["S256"],
-    token_endpoint_auth_methods_supported: ["none"],
-    scopes_supported: [],
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Helper: resolve the user's gateway URL from Supabase (or env fallback)
-// ---------------------------------------------------------------------------
-
-async function getUserGatewayOverrides(
-  ctx: { auth: { user: { userId: string }; accessToken: string } },
-): Promise<GatewayOverrides | null> {
-  try {
-    const settings = await getUserSettings(
-      ctx.auth.accessToken,
-      ctx.auth.user.userId,
-    );
-    if (settings?.gateway_url) {
-      return {
-        gatewayUrl: settings.gateway_url,
-        gatewayToken: settings.gateway_token ?? undefined,
-      };
-    }
-  } catch {
-    // Supabase not configured or query failed — fall through
-  }
-  return null;
-}
 
 // ---------------------------------------------------------------------------
 // Tool 1: get-dashboard — renders the dashboard widget (or setup screen)
@@ -126,11 +45,8 @@ server.tool(
     },
     annotations: { readOnlyHint: true },
   },
-  async ({ filter }, ctx) => {
-    const overrides = await getUserGatewayOverrides(ctx);
-
-    // No gateway URL configured → show setup screen
-    if (!overrides) {
+  async ({ filter }) => {
+    if (!currentConnection) {
       return widget({
         props: {
           screen: "setup" as const,
@@ -139,7 +55,7 @@ server.tool(
       });
     }
 
-    const data = await client.getDashboard(overrides, filter);
+    const data = await client.getDashboard(currentConnection, filter);
     const { metrics, tasks } = data;
 
     const byStatus = (s: string) => tasks.filter((t) => t.status === s).length;
@@ -164,7 +80,7 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
-// Tool 2: connect-openclaw — save gateway URL and return dashboard
+// Tool 2: connect-openclaw — save gateway URL in memory and return dashboard
 // ---------------------------------------------------------------------------
 
 server.tool(
@@ -176,16 +92,10 @@ server.tool(
       gatewayToken: z.string().optional().describe("Optional auth token for the gateway"),
     }),
   },
-  async ({ gatewayUrl, gatewayToken }, ctx) => {
-    await saveUserSettings(
-      ctx.auth.accessToken,
-      ctx.auth.user.userId,
-      gatewayUrl,
-      gatewayToken,
-    );
+  async ({ gatewayUrl, gatewayToken }) => {
+    currentConnection = { gatewayUrl, gatewayToken };
 
-    const overrides: GatewayOverrides = { gatewayUrl, gatewayToken };
-    const data = await client.getDashboard(overrides);
+    const data = await client.getDashboard(currentConnection);
 
     return object({
       success: true,
@@ -220,12 +130,11 @@ server.tool(
         .describe("New priority"),
     }),
   },
-  async (params, ctx) => {
-    const overrides = await getUserGatewayOverrides(ctx);
-    if (!overrides) {
-      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+  async (params) => {
+    if (!currentConnection) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const updated = await client.updateTask(overrides, params);
+    const updated = await client.updateTask(currentConnection, params);
     return object({
       success: true,
       task: updated,
@@ -255,12 +164,11 @@ server.tool(
       assignee: z.string().optional().describe("Assignee"),
     }),
   },
-  async (params, ctx) => {
-    const overrides = await getUserGatewayOverrides(ctx);
-    if (!overrides) {
-      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+  async (params) => {
+    if (!currentConnection) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const created = await client.createTask(overrides, params);
+    const created = await client.createTask(currentConnection, params);
     return object({
       success: true,
       task: created,
@@ -279,12 +187,11 @@ server.tool(
     schema: z.object({}),
     annotations: { readOnlyHint: true },
   },
-  async (_params, ctx) => {
-    const overrides = await getUserGatewayOverrides(ctx);
-    if (!overrides) {
-      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+  async () => {
+    if (!currentConnection) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const metrics = await client.getMetrics(overrides);
+    const metrics = await client.getMetrics(currentConnection);
     return object({ ...metrics });
   }
 );
@@ -305,12 +212,11 @@ server.tool(
     }),
     annotations: { readOnlyHint: true },
   },
-  async ({ filter }, ctx) => {
-    const overrides = await getUserGatewayOverrides(ctx);
-    if (!overrides) {
-      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+  async ({ filter }) => {
+    if (!currentConnection) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const data = await client.getDashboard(overrides, filter);
+    const data = await client.getDashboard(currentConnection, filter);
     return object({
       tasks: data.tasks,
       metrics: data.metrics,

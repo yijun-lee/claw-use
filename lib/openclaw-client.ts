@@ -27,8 +27,7 @@ const ACTIVE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function inferStatus(session: OpenClawSession): TaskStatus {
-  const updatedAt = new Date(session.updatedAt).getTime();
-  const age = Date.now() - updatedAt;
+  const age = Date.now() - session.updatedAt;
 
   if (age < ACTIVE_THRESHOLD_MS) return "in-progress";
   if (age < STALE_THRESHOLD_MS) return "todo";
@@ -36,15 +35,16 @@ function inferStatus(session: OpenClawSession): TaskStatus {
 }
 
 function mapSessionToTask(session: OpenClawSession): Task {
+  const ts = new Date(session.updatedAt).toISOString();
   return {
-    id: session.sessionKey,
-    title: session.displayName || session.subject || session.sessionKey,
-    description: session.subject || "",
+    id: session.key,
+    title: session.displayName || session.label || session.key,
+    description: session.label || "",
     status: inferStatus(session),
     priority: "medium",
     assignee: session.channel || "unassigned",
-    createdAt: session.updatedAt,
-    updatedAt: session.updatedAt,
+    createdAt: ts,
+    updatedAt: ts,
     feedback: [],
   };
 }
@@ -159,7 +159,11 @@ export class OpenClawClient {
         response.error?.message || "sessions_list returned an error",
       );
     }
-    return response.result as OpenClawSession[];
+    // Gateway returns { content: [...], details: { sessions: [...] } }
+    const result = response.result as Record<string, unknown>;
+    const details = result.details as Record<string, unknown> | undefined;
+    const sessions = details?.sessions as OpenClawSession[] | undefined;
+    return sessions || [];
   }
 
   // --- Public API ----------------------------------------------------------

@@ -58,12 +58,14 @@ export interface TaskCreateInput {
 
 export interface OpenClawSession {
   sessionId: string;
-  sessionKey: string;
-  updatedAt: string;
+  key: string;
+  updatedAt: number;
   displayName?: string;
   channel?: string;
-  subject?: string;
-  origin?: Record<string, unknown>;
+  label?: string;
+  model?: string;
+  totalTokens?: number;
+  contextTokens?: number;
 }
 
 export interface ToolInvokeResponse {
