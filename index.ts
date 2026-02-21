@@ -25,12 +25,12 @@ const server = new MCPServer({
 server.tool(
   {
     name: "get-dashboard",
-    description: "OpenClaw 작업 대시보드를 표시합니다. 칸반 보드와 메트릭 요약을 포함합니다.",
+    description: "Display the OpenClaw task dashboard with a kanban board and metrics summary.",
     schema: z.object({
       filter: z
         .enum(["all", "heartbeat", "backlog", "todo", "in-progress", "done"])
         .optional()
-        .describe("특정 상태의 작업만 필터링"),
+        .describe("Filter tasks by a specific status"),
     }),
     widget: {
       name: "dashboard",
@@ -67,21 +67,21 @@ server.tool(
 server.tool(
   {
     name: "update-task",
-    description: "작업의 상태, 제목, 설명, 담당자, 우선순위를 수정하거나 피드백을 추가합니다.",
+    description: "Update a task's status, title, description, assignee, priority, or add feedback.",
     schema: z.object({
-      taskId: z.string().describe("수정할 작업 ID"),
+      taskId: z.string().describe("ID of the task to update"),
       status: z
         .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
         .optional()
-        .describe("새로운 상태"),
-      title: z.string().optional().describe("새로운 제목"),
-      description: z.string().optional().describe("새로운 설명"),
-      feedback: z.string().optional().describe("추가할 피드백 메시지"),
-      assignee: z.string().optional().describe("새로운 담당자"),
+        .describe("New status"),
+      title: z.string().optional().describe("New title"),
+      description: z.string().optional().describe("New description"),
+      feedback: z.string().optional().describe("Feedback message to add"),
+      assignee: z.string().optional().describe("New assignee"),
       priority: z
         .enum(["low", "medium", "high", "critical"])
         .optional()
-        .describe("새로운 우선순위"),
+        .describe("New priority"),
     }),
   },
   async (params) => {
@@ -97,19 +97,19 @@ server.tool(
 server.tool(
   {
     name: "create-task",
-    description: "새로운 작업을 생성합니다.",
+    description: "Create a new task.",
     schema: z.object({
-      title: z.string().describe("작업 제목"),
-      description: z.string().optional().describe("작업 설명"),
+      title: z.string().describe("Task title"),
+      description: z.string().optional().describe("Task description"),
       status: z
         .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
         .optional()
-        .describe("초기 상태 (기본: backlog)"),
+        .describe("Initial status (default: backlog)"),
       priority: z
         .enum(["low", "medium", "high", "critical"])
         .optional()
-        .describe("우선순위 (기본: medium)"),
-      assignee: z.string().optional().describe("담당자"),
+        .describe("Priority (default: medium)"),
+      assignee: z.string().optional().describe("Assignee"),
     }),
   },
   async (params) => {
@@ -125,7 +125,7 @@ server.tool(
 server.tool(
   {
     name: "get-metrics",
-    description: "에이전트 성능 메트릭을 조회합니다. 토큰 사용량, 성공률, 응답시간 등을 포함합니다.",
+    description: "Retrieve agent performance metrics including token usage, success rate, and response time.",
     schema: z.object({}),
     annotations: { readOnlyHint: true },
   },
@@ -139,12 +139,12 @@ server.tool(
 server.tool(
   {
     name: "refresh-dashboard",
-    description: "대시보드 데이터를 새로고침합니다. 위젯에서 호출됩니다.",
+    description: "Refresh dashboard data. Called from the widget.",
     schema: z.object({
       filter: z
         .enum(["all", "heartbeat", "backlog", "todo", "in-progress", "done"])
         .optional()
-        .describe("필터 상태"),
+        .describe("Filter status"),
     }),
     annotations: { readOnlyHint: true },
   },
