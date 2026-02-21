@@ -4,7 +4,15 @@
       "WebFetch(domain:skills.sh)",
       "Bash(npx skills:*)",
       "Bash(gh auth:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(gh repo:*)",
+      "Bash(git remote:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.openclaw.ai)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:moltfounders.com)",
+      "Bash(git:*)",
+      "Bash(rsync:*)"
     ]
   }
 }

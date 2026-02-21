@@ -1,179 +1,96 @@
-# 🦞 OpenClaw Orchestrator — MCP App
+# MCP Apps Hackathon @ YC by Manufact
 
-> **"Dashboards show you. MCP Apps think and act."**
+![MCP Apps Hackathon](https://d2xtzufx9mvgbo.cloudfront.net/events/Screenshot%202026-02-05%20at%205.39.36%E2%80%AFPM-4352f7d27bd84e6f.png)
 
-An MCP App that turns ChatGPT, Claude, or any MCP-compatible client into a **live control tower** for your OpenClaw instance — monitor, diagnose, and orchestrate all background tasks without ever leaving the conversation.
 
-![MIT License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
-![MCP App](https://img.shields.io/badge/MCP-App-FF6B35?style=for-the-badge)
-![OpenClaw](https://img.shields.io/badge/OpenClaw-Compatible-E34234?style=for-the-badge)
+A hackathon starter built with [mcp-use](https://mcp-use.com) and deployed on [Manufact Cloud](https://manufact.com). Part of the [MCP Apps Hackathon by Manufact](https://events.ycombinator.com/manufact-hackathon26) at Y Combinator.
 
----
+## Getting Started
 
-## The Problem
+Install dependencies and start the dev server:
 
-OpenClaw runs 24/7 — classifying emails, collecting news, generating morning briefings, handling Discord DMs, running GitHub PR reports, monitoring prices, and more. All at the same time.
-
-But when something goes wrong at 3 AM?
-
-- **Dashboards** need a human staring at them. No eyes, no action.
-- **Alert notifications** tell you there's a problem, but don't solve it.
-- **Automation scripts** handle `if X then Y`, but can't reason about novel failures.
-- **Text chat** (Telegram/WhatsApp) can trigger commands, but you can't *see* what's happening.
-
-The fundamental issue: **monitoring and acting are in separate contexts.** You see the problem in one place, then context-switch to fix it in another.
-
----
-
-## The Solution
-
-OpenClaw Orchestrator bridges monitoring and action in a single interface — inside your AI conversation.
-
-```
-┌─────────────────────────────────────────────┐
-│              AI Client (Claude/ChatGPT)      │
-│                                              │
-│  ┌─────────────────────────────────────┐     │
-│  │     OpenClaw Orchestrator UI        │     │
-│  │                                     │     │
-│  │  ┌──────┐ ┌──────┐ ┌──────┐       │     │
-│  │  │ Done │ │ Run  │ │ Fail │       │     │
-│  │  │      │ │      │ │      │       │     │
-│  │  │ ✅📧 │ │ 🔄🤖 │ │ ❌📰 │       │     │
-│  │  │ ✅💬 │ │ 🔄📊 │ │ ⚠️☀️ │       │     │
-│  │  └──────┘ └──────┘ └──────┘       │     │
-│  └─────────────────────────────────────┘     │
-│                                              │
-│  💬 "The two yellow cards are related.       │
-│      News cron failed because X API token    │
-│      expired. Morning briefing is incomplete │
-│      as a result. Root cause is one thing."  │
-│                                              │
-│  You: "Fix the token, re-collect, and        │
-│        regenerate the briefing."             │
-│                                              │
-│  💬 "Done. All three tasks succeeded." ✅    │
-└─────────────────────────────────────────────┘
+```bash
+npm install
+npm run dev
 ```
 
----
+Open [http://localhost:3000/inspector](http://localhost:3000/inspector) to test your server interactively — no external tunneling needed.
 
-## Why MCP App — Not a Dashboard?
+You can start building by editing `index.ts`. Add tools, resources, and prompts — the server auto-reloads as you edit thanks to Hot Module Reloading (HMR).
 
-|                              | Automation Script | Dashboard | API Direct | **MCP App** ✅ |
-|------------------------------|:-:|:-:|:-:|:-:|
-| **AI Judgment** (novel failures) | ❌ Rules only | ❌ Human judges | ✅ | ✅ |
-| **Visible to Human**            | ❌ Black box  | ✅             | ❌ Black box | ✅ |
+## Connecting to Claude or ChatGPT
 
-MCP App is the **only interface** where AI makes decisions *and* humans can see and override them.
+### Local testing with tunnel
 
-- **Script** → executes rules, invisible to you
-- **Dashboard** → visible, but only pre-defined buttons
-- **API wiring** → AI can act, but you don't know what it's doing
-- **MCP App** → AI reasons + acts + you see everything + you override anytime
+Start the dev server with a built-in tunnel to get a public HTTPS URL instantly — no deployment needed:
 
----
-
-## Features
-
-### 📋 Kanban Status Board
-All OpenClaw tasks — cron jobs, sessions, webhooks, browser tasks, skills — visualized as cards in Done / Running / Failed / Scheduled columns. One glance, full picture.
-
-### 🔗 Causal Failure Analysis
-Don't just see *what* failed — understand *why* and *what else* was affected. The AI traces cascading failures back to their root cause automatically.
-
-### 💬 Natural Language Actions
-No buttons needed. Speak complex, multi-step actions that no dashboard could pre-define:
-
-- *"Renew the X API token, re-run news collection, then regenerate the briefing."*
-- *"Skip the docs PRs and send me just the code changes to Slack."*
-- *"If this cron fails from rate limiting again, auto-backoff and retry 3 times before alerting me."*
-
-### 📡 Real-Time Progress Tracking
-Watch tasks progress live inside the UI. Not just "running" → "done", but granular steps. Intervene mid-execution if the direction is wrong.
-
-### 🛡️ Proactive Strategy Registration
-Teach the AI orchestrator how to handle future failures — in natural language, not code. Change strategies anytime by just talking.
-
----
-
-## Widget ↔ Model Interaction
-
-The two-way communication loop is the core of this MCP App:
-
-```
-  ┌──────────┐                    ┌──────────┐
-  │  Widget   │───── User sees ──▶│  Human   │
-  │ (Kanban)  │     failed card   │          │
-  └──────────┘                    └────┬─────┘
-       ▲                               │
-       │                    "Why did this fail?"
-  AI updates                           │
-  card status                          ▼
-       │                         ┌──────────┐
-       └──── AI analyzes ◀──────│  Model   │
-              logs & acts        │ (Claude)  │
-                                 └──────────┘
+```bash
+npm run dev -- --tunnel
 ```
 
-- **Widget → Human → Model**: See a red card → ask about it → AI analyzes and suggests
-- **Model → Widget**: AI executes fix → card moves from Failed to Running to Done in real-time
-- **Human override**: At any point, change the AI's plan mid-execution
+The CLI prints a stable public URL like `https://<subdomain>.tunnel.mcp-use.com/mcp`. Add it as a remote MCP server:
 
----
+- **Claude**: Settings → **Integrations** → **Add integration** → paste the tunnel URL
+- **ChatGPT**: Settings → **Connectors** → **Add MCP server** → paste the tunnel URL
 
-## Quick Start
+The tunnel keeps the same subdomain across restarts, so your link stays stable while you iterate.
 
-### Prerequisites
-- [OpenClaw](https://github.com/openclaw/openclaw) gateway running (`openclaw gateway --port 18789`)
-- An MCP-compatible client (Claude, ChatGPT, VS Code, etc.)
+### After deployment
 
-### Install
+Once deployed to Manufact Cloud, add your production URL as a remote MCP server:
 
-
-### Configure
-
-
-### Use
-Open Claude or ChatGPT and say:
 ```
-"Show me my OpenClaw status."
+https://<your-slug>.run.mcp-use.com/mcp
 ```
 
-That's it. The kanban board appears, and you're in control.
+## Alternative: Goose (no Claude Pro or ChatGPT Plus required)
 
----
+If you don't have a Claude Pro or ChatGPT Plus account, you can use [Goose](https://block.github.io/goose/docs/quickstart/) 
 
-## MCP Tools Exposed
+Follow the [Goose quickstart](https://block.github.io/goose/docs/quickstart/) to install it, then add your tunnel or deployed URL as an MCP extension.
 
-| Tool | Description |
-|------|-------------|
-| `get_status` | Full gateway status — sessions, crons, channels, queues |
-| `get_task_detail` | Detailed info + logs for a specific task |
-| `execute_action` | Run any action: restart, reschedule, model change, etc. |
-| `analyze_failure` | AI-powered root cause analysis with causal chain |
-| `register_strategy` | Set natural-language rules for future auto-response |
-| `get_timeline` | Real-time execution flow for running tasks |
+## Deploy
 
----
+### Manufact Cloud Dashboard
 
+1. Sign in at [manufact.com](https://manufact.com)
+2. Go to **Servers** → **New Server**
+3. Connect your GitHub repository
+4. Click **Deploy** 
 
-## Built With
+Your server will be live at `https://<your-slug>.run.mcp-use.com/mcp` and manageable from the [dashboard](https://manufact.com/cloud/servers).
 
-- [OpenClaw](https://github.com/openclaw/openclaw) — Personal AI assistant platform (196k ⭐)
-- [Manufact MCP SDK](https://github.com/mcp-use/mcp-use) — MCP App development framework
-- [MCP Protocol](https://modelcontextprotocol.io/) — Universal AI tool standard
+### CLI
 
----
+```bash
+# Login to Manufact Cloud
+npx @mcp-use/cli login
 
-## Philosophy
+# Deploy from your repo root
+npm run deploy
+```
 
-> Dashboards are monitors. MCP Apps are co-pilots.
->
-> In the age of always-on agents, the control interface shouldn't require a human to be always-on too. Let AI manage agents. Let humans steer.
+The CLI detects your GitHub repository, builds the project, and streams logs until deployment completes:
 
----
+```
+✓ Deployment successful!
 
-## License
+🌐 MCP Server URL:
+   https://<your-slug>.run.mcp-use.com/mcp
 
-MIT — see [LICENSE](./LICENSE) for details.
+📊 Dashboard:
+   https://manufact.com/cloud/servers/<your-slug>
+```
+
+Subsequent `npm run deploy` calls redeploy to the same URL 
+
+## Resources
+
+- [mcp-use Documentation](https://mcp-use.com/docs/typescript/getting-started/quickstart) — guides, API reference, and tutorials
+- [CLI Reference](https://mcp-use.com/docs/typescript/server/cli-reference) — full `mcp-use` CLI docs
+- [Manufact Cloud Deployment](https://mcp-use.com/docs/typescript/server/deployment/mcp-use) — deployment guide
+- [MCP Apps / UI Widgets](https://mcp-use.com/docs/typescript/server/mcp-apps) — build interactive widgets in Claude and ChatGPT
+- [Model Context Protocol](https://modelcontextprotocol.io/) — the open standard powering MCP servers
+- [Goose](https://block.github.io/goose/docs/quickstart/) — free open-source MCP client
+- [MCP Apps Hackathon](https://events.ycombinator.com/manufact-hackathon26) — event page
+
