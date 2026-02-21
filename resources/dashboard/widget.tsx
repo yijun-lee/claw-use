@@ -421,7 +421,7 @@ const Dashboard: React.FC = () => {
             />
           </div>
 
-          {/* Kanban board */}
+          {/* Task list */}
           <div className="px-4 pb-4">
             <KanbanBoard
               tasks={tasks}
