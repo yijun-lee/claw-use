@@ -5,8 +5,17 @@ import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
 
-// In-memory connection store (keyed by session — single-server hackathon mode)
+// Connection store — env vars as default, overridable via connect-openclaw tool
 let currentConnection: GatewayOverrides | null = null;
+
+function getConnection(): GatewayOverrides | null {
+  if (currentConnection) return currentConnection;
+  const url = process.env.OPENCLAW_GATEWAY_URL;
+  if (url) {
+    return { gatewayUrl: url, gatewayToken: process.env.OPENCLAW_GATEWAY_TOKEN };
+  }
+  return null;
+}
 
 const server = new MCPServer({
   name: "claw-use",
@@ -46,7 +55,8 @@ server.tool(
     annotations: { readOnlyHint: true },
   },
   async ({ filter }) => {
-    if (!currentConnection) {
+    const conn = getConnection();
+    if (!conn) {
       return widget({
         props: {
           screen: "setup" as const,
@@ -55,7 +65,7 @@ server.tool(
       });
     }
 
-    const data = await client.getDashboard(currentConnection, filter);
+    const data = await client.getDashboard(conn, filter);
     const { metrics, tasks } = data;
 
     const byStatus = (s: string) => tasks.filter((t) => t.status === s).length;
@@ -131,10 +141,11 @@ server.tool(
     }),
   },
   async (params) => {
-    if (!currentConnection) {
+    const conn = getConnection();
+    if (!conn) {
       return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const updated = await client.updateTask(currentConnection, params);
+    const updated = await client.updateTask(conn, params);
     return object({
       success: true,
       task: updated,
@@ -165,10 +176,11 @@ server.tool(
     }),
   },
   async (params) => {
-    if (!currentConnection) {
+    const conn = getConnection();
+    if (!conn) {
       return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const created = await client.createTask(currentConnection, params);
+    const created = await client.createTask(conn, params);
     return object({
       success: true,
       task: created,
@@ -188,10 +200,11 @@ server.tool(
     annotations: { readOnlyHint: true },
   },
   async () => {
-    if (!currentConnection) {
+    const conn = getConnection();
+    if (!conn) {
       return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const metrics = await client.getMetrics(currentConnection);
+    const metrics = await client.getMetrics(conn);
     return object({ ...metrics });
   }
 );
@@ -213,10 +226,11 @@ server.tool(
     annotations: { readOnlyHint: true },
   },
   async ({ filter }) => {
-    if (!currentConnection) {
+    const conn = getConnection();
+    if (!conn) {
       return text("Gateway not configured. Please use connect-openclaw first.");
     }
-    const data = await client.getDashboard(currentConnection, filter);
+    const data = await client.getDashboard(conn, filter);
     return object({
       tasks: data.tasks,
       metrics: data.metrics,

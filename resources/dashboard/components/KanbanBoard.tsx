@@ -51,8 +51,6 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
     <div className="flex flex-col gap-3">
       {COLUMNS.map((col) => {
         const colTasks = grouped[col.id];
-        if (colTasks.length === 0) return null;
-
         const visible = isExpanded ? colTasks : colTasks.slice(0, INLINE_LIMIT);
         const hiddenCount = colTasks.length - visible.length;
 
@@ -128,6 +126,12 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
                   </div>
                 );
               })}
+
+              {colTasks.length === 0 && (
+                <div className="text-xs text-secondary text-center py-3 opacity-40">
+                  No tasks
+                </div>
+              )}
 
               {hiddenCount > 0 && (
                 <div className="text-[11px] text-secondary text-center py-1">
