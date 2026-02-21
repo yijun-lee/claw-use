@@ -1,4 +1,4 @@
-import { MCPServer, oauthSupabaseProvider, object, text, widget } from "mcp-use/server";
+import { MCPServer, oauthCustomProvider, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { OpenClawClient } from "./lib/openclaw-client.js";
 import { getUserSettings, saveUserSettings } from "./lib/supabase.js";
@@ -6,19 +6,8 @@ import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
 
-// Wrap Supabase provider with "direct" mode so ChatGPT can discover
-// the auth server metadata from the MCP server itself (not Supabase).
-const supabaseProvider = oauthSupabaseProvider();
-const oauthProvider = {
-  verifyToken: (token: string) => supabaseProvider.verifyToken(token),
-  getUserInfo: (payload: Record<string, unknown>) => supabaseProvider.getUserInfo(payload),
-  getIssuer: () => supabaseProvider.getIssuer(),
-  getAuthEndpoint: () => supabaseProvider.getAuthEndpoint(),
-  getTokenEndpoint: () => supabaseProvider.getTokenEndpoint(),
-  getScopesSupported: () => supabaseProvider.getScopesSupported(),
-  getGrantTypesSupported: () => supabaseProvider.getGrantTypesSupported(),
-  getMode: () => "direct" as const,
-};
+const projectId = process.env.MCP_USE_OAUTH_SUPABASE_PROJECT_ID!;
+const supabaseUrl = `https://${projectId}.supabase.co`;
 
 const server = new MCPServer({
   name: "claw-use",
@@ -35,7 +24,25 @@ const server = new MCPServer({
       sizes: ["512x512"],
     },
   ],
-  oauth: oauthProvider,
+  oauth: oauthCustomProvider({
+    issuer: `${supabaseUrl}/auth/v1`,
+    jwksUrl: `${supabaseUrl}/auth/v1/.well-known/jwks.json`,
+    authEndpoint: `${supabaseUrl}/auth/v1/authorize`,
+    tokenEndpoint: `${supabaseUrl}/auth/v1/token`,
+    scopesSupported: [],
+    grantTypesSupported: ["authorization_code", "refresh_token"],
+    verifyToken: async (token: string) => {
+      const [, payloadB64] = token.split(".");
+      const payload = JSON.parse(
+        Buffer.from(payloadB64, "base64url").toString(),
+      );
+      return { payload };
+    },
+    getUserInfo: (payload: Record<string, unknown>) => ({
+      userId: payload.sub as string,
+      email: payload.email as string,
+    }),
+  }),
 });
 
 // ---------------------------------------------------------------------------
