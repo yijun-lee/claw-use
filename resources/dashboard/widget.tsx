@@ -29,6 +29,7 @@ export const widgetMetadata: WidgetMetadata = {
 };
 
 interface DashboardState {
+  screen?: "setup" | "dashboard";
   tasks: TaskItem[];
   metrics: MetricsData;
   lastUpdated: string;
@@ -45,6 +46,128 @@ const DEFAULT_METRICS: MetricsData = {
 
 type RefreshArgs = { filter?: string } | null;
 type UpdateArgs = Record<string, unknown> | null;
+type ConnectArgs = { gatewayUrl: string; gatewayToken?: string } | null;
+
+// ---------------------------------------------------------------------------
+// Setup Screen — shown when no Gateway URL is configured
+// ---------------------------------------------------------------------------
+
+const SetupScreen: React.FC<{
+  onConnected: (data: DashboardState) => void;
+}> = ({ onConnected }) => {
+  const [gatewayUrl, setGatewayUrl] = useState("");
+  const [gatewayToken, setGatewayToken] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const {
+    callToolAsync: connectAsync,
+    isPending: isConnecting,
+  } = useCallTool<ConnectArgs>("connect-openclaw");
+
+  const handleConnect = useCallback(async () => {
+    if (!gatewayUrl.trim()) {
+      setError("Please enter a Gateway URL.");
+      return;
+    }
+    setError(null);
+
+    try {
+      const args: ConnectArgs = { gatewayUrl: gatewayUrl.trim() };
+      if (gatewayToken.trim()) args!.gatewayToken = gatewayToken.trim();
+
+      const result = await connectAsync(args);
+      if (result?.structuredContent) {
+        const data = result.structuredContent as unknown as {
+          success: boolean;
+          tasks: TaskItem[];
+          metrics: MetricsData;
+          lastUpdated: string;
+        };
+        if (data.success) {
+          onConnected({
+            screen: "dashboard",
+            tasks: data.tasks,
+            metrics: data.metrics,
+            lastUpdated: data.lastUpdated,
+          });
+          return;
+        }
+      }
+      setError("Connection failed. Please check the URL and try again.");
+    } catch {
+      setError("Connection failed. Please check the URL and try again.");
+    }
+  }, [gatewayUrl, gatewayToken, connectAsync, onConnected]);
+
+  return (
+    <div className="relative bg-surface-elevated border border-default rounded-2xl overflow-hidden">
+      <div className="p-6 flex flex-col items-center text-center">
+        {/* Logo / icon area */}
+        <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-4">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+          </svg>
+        </div>
+
+        <h2 className="text-lg font-bold text-default mb-1">Connect to OpenClaw</h2>
+        <p className="text-sm text-secondary mb-6 max-w-sm">
+          Enter your OpenClaw Gateway URL to connect your dashboard to your agent cluster.
+        </p>
+
+        {/* Form */}
+        <div className="w-full max-w-md space-y-3">
+          <div className="text-left">
+            <label className="block text-xs font-medium text-secondary mb-1">
+              Gateway URL <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="url"
+              value={gatewayUrl}
+              onChange={(e) => setGatewayUrl(e.target.value)}
+              placeholder="https://your-gateway.example.com"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
+              disabled={isConnecting}
+            />
+          </div>
+
+          <div className="text-left">
+            <label className="block text-xs font-medium text-secondary mb-1">
+              Auth Token <span className="text-tertiary">(optional)</span>
+            </label>
+            <input
+              type="password"
+              value={gatewayToken}
+              onChange={(e) => setGatewayToken(e.target.value)}
+              placeholder="Bearer token for authenticated gateways"
+              className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
+              disabled={isConnecting}
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-400 text-left">{error}</p>
+          )}
+
+          <Button
+            color="primary"
+            size="lg"
+            variant="solid"
+            onClick={handleConnect}
+            disabled={isConnecting || !gatewayUrl.trim()}
+            className="w-full mt-2"
+          >
+            {isConnecting ? "Connecting..." : "Connect"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Main Dashboard Component
+// ---------------------------------------------------------------------------
 
 const Dashboard: React.FC = () => {
   const {
@@ -67,6 +190,9 @@ const Dashboard: React.FC = () => {
   } = useCallTool<UpdateArgs>("update-task");
 
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+
+  // Determine current screen: state overrides props
+  const screen = state?.screen ?? props?.screen ?? "dashboard";
 
   // Use state if available (post-interaction), otherwise props (initial render)
   const tasks = useMemo(() => state?.tasks ?? props?.tasks ?? [], [state, props]);
@@ -174,6 +300,13 @@ const Dashboard: React.FC = () => {
     [sendFollowUpMessage]
   );
 
+  const handleConnected = useCallback(
+    (data: DashboardState) => {
+      setState(data);
+    },
+    [setState]
+  );
+
   // Loading state
   if (isPending || !props) {
     return (
@@ -197,6 +330,18 @@ const Dashboard: React.FC = () => {
     );
   }
 
+  // Setup screen — gateway not configured
+  if (screen === "setup") {
+    return (
+      <McpUseProvider>
+        <AppsSDKUIProvider linkComponent={Link}>
+          <SetupScreen onConnected={handleConnected} />
+        </AppsSDKUIProvider>
+      </McpUseProvider>
+    );
+  }
+
+  // Dashboard screen
   return (
     <McpUseProvider>
       <AppsSDKUIProvider linkComponent={Link}>

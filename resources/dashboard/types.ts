@@ -29,10 +29,11 @@ export const metricsSchema = z.object({
 });
 
 export const propSchema = z.object({
-  tasks: z.array(taskSchema),
-  metrics: metricsSchema,
-  lastUpdated: z.string(),
-  activeFilter: z.string(),
+  screen: z.enum(["setup", "dashboard"]).default("dashboard"),
+  tasks: z.array(taskSchema).optional(),
+  metrics: metricsSchema.optional(),
+  lastUpdated: z.string().optional(),
+  activeFilter: z.string().optional(),
 });
 
 export type DashboardProps = z.infer<typeof propSchema>;

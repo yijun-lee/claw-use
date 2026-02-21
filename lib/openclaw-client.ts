@@ -12,239 +12,11 @@ import type {
 import { OpenClawApiError } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// Mock data (used when OPENCLAW_MOCK !== "false")
-// ---------------------------------------------------------------------------
-
-const MOCK_TASKS: Task[] = [
-  // Heartbeat
-  {
-    id: "hb-1",
-    title: "API Gateway Health",
-    description: "Monitoring API gateway uptime and latency",
-    status: "heartbeat",
-    priority: "critical",
-    assignee: "system",
-    createdAt: "2026-02-21T08:00:00Z",
-    updatedAt: "2026-02-21T09:30:00Z",
-    feedback: [],
-  },
-  {
-    id: "hb-2",
-    title: "Token Budget Monitor",
-    description: "Tracking token usage against daily budget limits",
-    status: "heartbeat",
-    priority: "high",
-    assignee: "system",
-    createdAt: "2026-02-21T08:00:00Z",
-    updatedAt: "2026-02-21T09:28:00Z",
-    feedback: [],
-  },
-  {
-    id: "hb-3",
-    title: "Agent Pool Status",
-    description: "3/5 agents active, 2 idle",
-    status: "heartbeat",
-    priority: "medium",
-    assignee: "system",
-    createdAt: "2026-02-21T08:00:00Z",
-    updatedAt: "2026-02-21T09:25:00Z",
-    feedback: [],
-  },
-  // Backlog
-  {
-    id: "bl-1",
-    title: "Implement OAuth2 flow",
-    description: "Add OAuth2 authentication for production deployment",
-    status: "backlog",
-    priority: "high",
-    assignee: "unassigned",
-    createdAt: "2026-02-20T14:00:00Z",
-    updatedAt: "2026-02-20T14:00:00Z",
-    feedback: [
-      {
-        id: "fb-1",
-        author: "PM",
-        message: "Priority for next sprint",
-        createdAt: "2026-02-20T15:00:00Z",
-      },
-    ],
-  },
-  {
-    id: "bl-2",
-    title: "Add rate limiting",
-    description: "Implement rate limiting on all API endpoints",
-    status: "backlog",
-    priority: "medium",
-    assignee: "unassigned",
-    createdAt: "2026-02-19T10:00:00Z",
-    updatedAt: "2026-02-19T10:00:00Z",
-    feedback: [],
-  },
-  {
-    id: "bl-3",
-    title: "Dashboard export to PDF",
-    description: "Allow users to export dashboard metrics as PDF reports",
-    status: "backlog",
-    priority: "low",
-    assignee: "unassigned",
-    createdAt: "2026-02-18T09:00:00Z",
-    updatedAt: "2026-02-18T09:00:00Z",
-    feedback: [],
-  },
-  // To-Do
-  {
-    id: "td-1",
-    title: "Write integration tests",
-    description: "Create test suite for all 5 MCP tools",
-    status: "todo",
-    priority: "high",
-    assignee: "agent-02",
-    createdAt: "2026-02-20T11:00:00Z",
-    updatedAt: "2026-02-21T08:00:00Z",
-    feedback: [],
-  },
-  {
-    id: "td-2",
-    title: "Setup CI/CD pipeline",
-    description: "Configure GitHub Actions for auto-deploy on merge",
-    status: "todo",
-    priority: "medium",
-    assignee: "agent-03",
-    createdAt: "2026-02-20T12:00:00Z",
-    updatedAt: "2026-02-20T12:00:00Z",
-    feedback: [],
-  },
-  {
-    id: "td-3",
-    title: "Error boundary components",
-    description: "Add React error boundaries to widget components",
-    status: "todo",
-    priority: "medium",
-    assignee: "agent-01",
-    createdAt: "2026-02-20T13:00:00Z",
-    updatedAt: "2026-02-20T13:00:00Z",
-    feedback: [],
-  },
-  // In Progress
-  {
-    id: "ip-1",
-    title: "Kanban drag-and-drop",
-    description: "Implement click-based task status transitions in the kanban board",
-    status: "in-progress",
-    priority: "high",
-    assignee: "agent-01",
-    createdAt: "2026-02-20T09:00:00Z",
-    updatedAt: "2026-02-21T09:15:00Z",
-    feedback: [
-      {
-        id: "fb-2",
-        author: "reviewer",
-        message: "Use arrow buttons instead of drag for iframe compatibility",
-        createdAt: "2026-02-21T08:30:00Z",
-      },
-    ],
-  },
-  {
-    id: "ip-2",
-    title: "Metrics aggregation service",
-    description: "Build service to aggregate token usage and success rates across agents",
-    status: "in-progress",
-    priority: "critical",
-    assignee: "agent-02",
-    createdAt: "2026-02-19T16:00:00Z",
-    updatedAt: "2026-02-21T09:00:00Z",
-    feedback: [],
-  },
-  {
-    id: "ip-3",
-    title: "Dark mode theme support",
-    description: "Ensure all components respect useWidgetTheme for light/dark mode",
-    status: "in-progress",
-    priority: "medium",
-    assignee: "agent-03",
-    createdAt: "2026-02-20T10:00:00Z",
-    updatedAt: "2026-02-21T08:45:00Z",
-    feedback: [],
-  },
-  // Done
-  {
-    id: "dn-1",
-    title: "MCP server scaffold",
-    description: "Initial MCP server setup with mcp-use framework",
-    status: "done",
-    priority: "high",
-    assignee: "agent-01",
-    createdAt: "2026-02-18T08:00:00Z",
-    updatedAt: "2026-02-19T17:00:00Z",
-    feedback: [],
-  },
-  {
-    id: "dn-2",
-    title: "Mock data layer",
-    description: "Create comprehensive mock data for development",
-    status: "done",
-    priority: "medium",
-    assignee: "agent-02",
-    createdAt: "2026-02-18T10:00:00Z",
-    updatedAt: "2026-02-20T11:00:00Z",
-    feedback: [],
-  },
-  {
-    id: "dn-3",
-    title: "Widget type definitions",
-    description: "Define TypeScript types for all widget props and state",
-    status: "done",
-    priority: "medium",
-    assignee: "agent-01",
-    createdAt: "2026-02-18T11:00:00Z",
-    updatedAt: "2026-02-20T14:00:00Z",
-    feedback: [
-      {
-        id: "fb-3",
-        author: "reviewer",
-        message: "LGTM, types are comprehensive",
-        createdAt: "2026-02-20T15:00:00Z",
-      },
-    ],
-  },
-];
-
-const MOCK_METRICS: MetricsSummary = {
-  totalTokens: 152847,
-  estimatedCostUSD: 3.42,
-  successRate: 87,
-  avgResponseTimeMs: 1300,
-  totalTasks: 15,
-  completedTasks: 3,
-};
-
-let tasks = [...MOCK_TASKS];
-
-const STATUS_ORDER: TaskStatus[] = ["heartbeat", "backlog", "todo", "in-progress", "done"];
-
-// ---------------------------------------------------------------------------
 // Environment helpers
 // ---------------------------------------------------------------------------
 
-function isMock(): boolean {
-  return process.env.OPENCLAW_MOCK !== "false";
-}
-
-function getGatewayUrl(): string {
-  return process.env.OPENCLAW_GATEWAY_URL || "http://127.0.0.1:18789";
-}
-
-function getGatewayToken(): string | undefined {
-  return process.env.OPENCLAW_GATEWAY_TOKEN;
-}
-
 function getAgentId(): string {
   return process.env.OPENCLAW_AGENT_ID || "main";
-}
-
-function getAuthHeaders(): Record<string, string> {
-  const token = getGatewayToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 // ---------------------------------------------------------------------------
@@ -271,7 +43,7 @@ function mapSessionToTask(session: OpenClawSession): Task {
     status: inferStatus(session),
     priority: "medium",
     assignee: session.channel || "unassigned",
-    createdAt: session.updatedAt, // sessions_list doesn't expose createdAt
+    createdAt: session.updatedAt,
     updatedAt: session.updatedAt,
     feedback: [],
   };
@@ -281,23 +53,31 @@ function mapSessionToTask(session: OpenClawSession): Task {
 // Client
 // ---------------------------------------------------------------------------
 
+export interface GatewayOverrides {
+  gatewayUrl: string;
+  gatewayToken?: string;
+}
+
+const STATUS_ORDER: TaskStatus[] = ["heartbeat", "backlog", "todo", "in-progress", "done"];
+
 export class OpenClawClient {
   // --- Gateway HTTP helpers ------------------------------------------------
 
   private async invokeGatewayTool(
+    overrides: GatewayOverrides,
     tool: string,
     args?: Record<string, unknown>,
   ): Promise<ToolInvokeResponse> {
-    const url = `${getGatewayUrl()}/tools/invoke`;
+    const url = `${overrides.gatewayUrl}/tools/invoke`;
     const body: Record<string, unknown> = { tool };
     if (args) body.args = args;
 
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (overrides.gatewayToken) headers.Authorization = `Bearer ${overrides.gatewayToken}`;
+
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
@@ -309,18 +89,19 @@ export class OpenClawClient {
   }
 
   private async sendHookAgent(
+    overrides: GatewayOverrides,
     message: string,
     opts?: { agentId?: string },
   ): Promise<HookAgentResponse> {
-    const url = `${getGatewayUrl()}/hooks/agent`;
+    const url = `${overrides.gatewayUrl}/hooks/agent`;
     const agentId = opts?.agentId || getAgentId();
+
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (overrides.gatewayToken) headers.Authorization = `Bearer ${overrides.gatewayToken}`;
 
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...getAuthHeaders(),
-      },
+      headers,
       body: JSON.stringify({ agentId, message }),
     });
 
@@ -337,7 +118,6 @@ export class OpenClawClient {
   }
 
   private async handleHttpError(res: Response): Promise<never> {
-    // Rate limit — respect Retry-After
     if (res.status === 429) {
       const retryAfter = res.headers.get("Retry-After");
       throw new OpenClawApiError(
@@ -370,8 +150,8 @@ export class OpenClawClient {
 
   // --- Fetching sessions from Gateway --------------------------------------
 
-  private async fetchSessions(): Promise<OpenClawSession[]> {
-    const response = await this.invokeGatewayTool("sessions_list");
+  private async fetchSessions(overrides: GatewayOverrides): Promise<OpenClawSession[]> {
+    const response = await this.invokeGatewayTool(overrides, "sessions_list");
     if (!response.ok || !response.result) {
       throw new OpenClawApiError(
         502,
@@ -382,22 +162,10 @@ export class OpenClawClient {
     return response.result as OpenClawSession[];
   }
 
-  // --- Public API (same interface as before) --------------------------------
+  // --- Public API ----------------------------------------------------------
 
-  async getDashboard(filter?: string): Promise<DashboardData> {
-    if (isMock()) {
-      const filtered =
-        filter && filter !== "all"
-          ? tasks.filter((t) => t.status === filter)
-          : tasks;
-      return {
-        tasks: filtered,
-        metrics: MOCK_METRICS,
-        lastUpdated: new Date().toISOString(),
-      };
-    }
-
-    const sessions = await this.fetchSessions();
+  async getDashboard(overrides: GatewayOverrides, filter?: string): Promise<DashboardData> {
+    const sessions = await this.fetchSessions(overrides);
     let mappedTasks = sessions.map(mapSessionToTask);
 
     if (filter && filter !== "all") {
@@ -413,47 +181,21 @@ export class OpenClawClient {
     };
   }
 
-  async getTasks(): Promise<Task[]> {
-    if (isMock()) return tasks;
-
-    const sessions = await this.fetchSessions();
-    return sessions.map(mapSessionToTask);
-  }
-
-  async getMetrics(): Promise<MetricsSummary> {
-    if (isMock()) return MOCK_METRICS;
-
-    const sessions = await this.fetchSessions();
+  async getMetrics(overrides: GatewayOverrides): Promise<MetricsSummary> {
+    const sessions = await this.fetchSessions(overrides);
     const mappedTasks = sessions.map(mapSessionToTask);
     return this.computeMetrics(sessions, mappedTasks);
   }
 
-  async createTask(input: TaskCreateInput): Promise<Task> {
-    if (isMock()) {
-      const newTask: Task = {
-        id: `task-${Date.now()}`,
-        title: input.title,
-        description: input.description || "",
-        status: input.status || "backlog",
-        priority: input.priority || "medium",
-        assignee: input.assignee || "unassigned",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        feedback: [],
-      };
-      tasks.push(newTask);
-      return newTask;
-    }
-
+  async createTask(overrides: GatewayOverrides, input: TaskCreateInput): Promise<Task> {
     const parts = [`Create task: ${input.title}`];
     if (input.description) parts.push(`Description: ${input.description}`);
     if (input.priority) parts.push(`Priority: ${input.priority}`);
     if (input.assignee) parts.push(`Assignee: ${input.assignee}`);
     if (input.status) parts.push(`Status: ${input.status}`);
 
-    await this.sendHookAgent(parts.join("\n"));
+    await this.sendHookAgent(overrides, parts.join("\n"));
 
-    // Hook is async (202); return an optimistic task object
     return {
       id: `pending-${Date.now()}`,
       title: input.title,
@@ -467,33 +209,7 @@ export class OpenClawClient {
     };
   }
 
-  async updateTask(update: TaskUpdate): Promise<Task> {
-    if (isMock()) {
-      const idx = tasks.findIndex((t) => t.id === update.taskId);
-      if (idx === -1) throw new Error(`Task ${update.taskId} not found`);
-
-      const task = { ...tasks[idx] };
-      if (update.status) task.status = update.status;
-      if (update.title) task.title = update.title;
-      if (update.description) task.description = update.description;
-      if (update.assignee) task.assignee = update.assignee;
-      if (update.priority) task.priority = update.priority;
-      if (update.feedback) {
-        task.feedback = [
-          ...task.feedback,
-          {
-            id: `fb-${Date.now()}`,
-            author: "user",
-            message: update.feedback,
-            createdAt: new Date().toISOString(),
-          },
-        ];
-      }
-      task.updatedAt = new Date().toISOString();
-      tasks[idx] = task;
-      return task;
-    }
-
+  async updateTask(overrides: GatewayOverrides, update: TaskUpdate): Promise<Task> {
     const parts = [`Update task ${update.taskId}:`];
     if (update.status) parts.push(`Status → ${update.status}`);
     if (update.title) parts.push(`Title → ${update.title}`);
@@ -502,9 +218,8 @@ export class OpenClawClient {
     if (update.priority) parts.push(`Priority → ${update.priority}`);
     if (update.feedback) parts.push(`Feedback: ${update.feedback}`);
 
-    await this.sendHookAgent(parts.join("\n"));
+    await this.sendHookAgent(overrides, parts.join("\n"));
 
-    // Hook is async; return optimistic update
     return {
       id: update.taskId,
       title: update.title || update.taskId,
@@ -527,7 +242,7 @@ export class OpenClawClient {
     };
   }
 
-  // --- Status navigation (unchanged) --------------------------------------
+  // --- Status navigation ---------------------------------------------------
 
   getNextStatus(current: TaskStatus): TaskStatus | null {
     const idx = STATUS_ORDER.indexOf(current);
@@ -542,15 +257,14 @@ export class OpenClawClient {
   // --- Metrics aggregation -------------------------------------------------
 
   private computeMetrics(
-    sessions: OpenClawSession[],
+    _sessions: OpenClawSession[],
     mappedTasks: Task[],
   ): MetricsSummary {
     const total = mappedTasks.length;
     const completed = mappedTasks.filter((t) => t.status === "done").length;
-    const active = mappedTasks.filter((t) => t.status === "in-progress").length;
 
     return {
-      totalTokens: 0, // not available from sessions_list
+      totalTokens: 0,
       estimatedCostUSD: 0,
       successRate: total > 0 ? Math.round((completed / total) * 100) : 0,
       avgResponseTimeMs: 0,

@@ -1,6 +1,8 @@
-import { MCPServer, object, text, widget } from "mcp-use/server";
+import { MCPServer, oauthSupabaseProvider, object, text, widget } from "mcp-use/server";
 import { z } from "zod";
 import { OpenClawClient } from "./lib/openclaw-client.js";
+import { getUserSettings, saveUserSettings } from "./lib/supabase.js";
+import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
 
@@ -19,9 +21,37 @@ const server = new MCPServer({
       sizes: ["512x512"],
     },
   ],
+  oauth: oauthSupabaseProvider(),
 });
 
-// Tool 1: get-dashboard — renders the dashboard widget
+// ---------------------------------------------------------------------------
+// Helper: resolve the user's gateway URL from Supabase (or env fallback)
+// ---------------------------------------------------------------------------
+
+async function getUserGatewayOverrides(
+  ctx: { auth: { user: { userId: string }; accessToken: string } },
+): Promise<GatewayOverrides | null> {
+  try {
+    const settings = await getUserSettings(
+      ctx.auth.accessToken,
+      ctx.auth.user.userId,
+    );
+    if (settings?.gateway_url) {
+      return {
+        gatewayUrl: settings.gateway_url,
+        gatewayToken: settings.gateway_token ?? undefined,
+      };
+    }
+  } catch {
+    // Supabase not configured or query failed — fall through
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Tool 1: get-dashboard — renders the dashboard widget (or setup screen)
+// ---------------------------------------------------------------------------
+
 server.tool(
   {
     name: "get-dashboard",
@@ -39,14 +69,27 @@ server.tool(
     },
     annotations: { readOnlyHint: true },
   },
-  async ({ filter }) => {
-    const data = await client.getDashboard(filter);
+  async ({ filter }, ctx) => {
+    const overrides = await getUserGatewayOverrides(ctx);
+
+    // No gateway URL configured → show setup screen
+    if (!overrides) {
+      return widget({
+        props: {
+          screen: "setup" as const,
+        },
+        output: text("Please configure your OpenClaw Gateway URL to get started."),
+      });
+    }
+
+    const data = await client.getDashboard(overrides, filter);
     const { metrics, tasks } = data;
 
     const byStatus = (s: string) => tasks.filter((t) => t.status === s).length;
 
     return widget({
       props: {
+        screen: "dashboard" as const,
         tasks,
         metrics,
         lastUpdated: data.lastUpdated,
@@ -63,7 +106,43 @@ server.tool(
   }
 );
 
-// Tool 2: update-task — backend tool for modifying tasks
+// ---------------------------------------------------------------------------
+// Tool 2: connect-openclaw — save gateway URL and return dashboard
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "connect-openclaw",
+    description: "Save the OpenClaw Gateway connection settings and load the dashboard.",
+    schema: z.object({
+      gatewayUrl: z.string().url().describe("OpenClaw Gateway URL"),
+      gatewayToken: z.string().optional().describe("Optional auth token for the gateway"),
+    }),
+  },
+  async ({ gatewayUrl, gatewayToken }, ctx) => {
+    await saveUserSettings(
+      ctx.auth.accessToken,
+      ctx.auth.user.userId,
+      gatewayUrl,
+      gatewayToken,
+    );
+
+    const overrides: GatewayOverrides = { gatewayUrl, gatewayToken };
+    const data = await client.getDashboard(overrides);
+
+    return object({
+      success: true,
+      tasks: data.tasks,
+      metrics: data.metrics,
+      lastUpdated: data.lastUpdated,
+    });
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool 3: update-task — backend tool for modifying tasks
+// ---------------------------------------------------------------------------
+
 server.tool(
   {
     name: "update-task",
@@ -84,8 +163,12 @@ server.tool(
         .describe("New priority"),
     }),
   },
-  async (params) => {
-    const updated = await client.updateTask(params);
+  async (params, ctx) => {
+    const overrides = await getUserGatewayOverrides(ctx);
+    if (!overrides) {
+      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+    }
+    const updated = await client.updateTask(overrides, params);
     return object({
       success: true,
       task: updated,
@@ -93,7 +176,10 @@ server.tool(
   }
 );
 
-// Tool 3: create-task — backend tool for creating new tasks
+// ---------------------------------------------------------------------------
+// Tool 4: create-task — backend tool for creating new tasks
+// ---------------------------------------------------------------------------
+
 server.tool(
   {
     name: "create-task",
@@ -112,8 +198,12 @@ server.tool(
       assignee: z.string().optional().describe("Assignee"),
     }),
   },
-  async (params) => {
-    const created = await client.createTask(params);
+  async (params, ctx) => {
+    const overrides = await getUserGatewayOverrides(ctx);
+    if (!overrides) {
+      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+    }
+    const created = await client.createTask(overrides, params);
     return object({
       success: true,
       task: created,
@@ -121,7 +211,10 @@ server.tool(
   }
 );
 
-// Tool 4: get-metrics — backend tool for metrics analysis
+// ---------------------------------------------------------------------------
+// Tool 5: get-metrics — backend tool for metrics analysis
+// ---------------------------------------------------------------------------
+
 server.tool(
   {
     name: "get-metrics",
@@ -129,13 +222,20 @@ server.tool(
     schema: z.object({}),
     annotations: { readOnlyHint: true },
   },
-  async () => {
-    const metrics = await client.getMetrics();
+  async (_params, ctx) => {
+    const overrides = await getUserGatewayOverrides(ctx);
+    if (!overrides) {
+      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+    }
+    const metrics = await client.getMetrics(overrides);
     return object({ ...metrics });
   }
 );
 
-// Tool 5: refresh-dashboard — widget-callable refresh
+// ---------------------------------------------------------------------------
+// Tool 6: refresh-dashboard — widget-callable refresh
+// ---------------------------------------------------------------------------
+
 server.tool(
   {
     name: "refresh-dashboard",
@@ -148,8 +248,12 @@ server.tool(
     }),
     annotations: { readOnlyHint: true },
   },
-  async ({ filter }) => {
-    const data = await client.getDashboard(filter);
+  async ({ filter }, ctx) => {
+    const overrides = await getUserGatewayOverrides(ctx);
+    if (!overrides) {
+      return text("Gateway not configured. Please use get-dashboard to set up your connection first.");
+    }
+    const data = await client.getDashboard(overrides, filter);
     return object({
       tasks: data.tasks,
       metrics: data.metrics,
