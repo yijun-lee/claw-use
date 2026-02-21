@@ -12,7 +12,14 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:moltfounders.com)",
       "Bash(git:*)",
-      "Bash(rsync:*)"
+      "Bash(rsync:*)",
+      "Bash(npm run:*)",
+      "Bash(tail:*)",
+      "Bash(npx mcp-use:*)",
+      "Bash(npx:*)",
+      "Bash(yes | npx mcp-use deploy 2>&1)",
+      "Bash(yes | npx mcp-use deploy --env OPENCLAW_MOCK=false --env OPENCLAW_GATEWAY_URL=https://decor-rooms-routers-suspected.trycloudflare.com 2>&1)",
+      "Bash(yes | npx mcp-use deploy --env-file .env --new 2>&1)"
     ]
   }
 }

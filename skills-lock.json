@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "chatgpt-app-builder": {
+      "source": "alpic-ai/skybridge",
+      "sourceType": "github",
+      "computedHash": "b69aa71eec6ba213a9221ebb69151f9156b84a809f16a6459e6c131651abe00b"
+    },
+    "mcp-app-builder": {
+      "source": "alpic-ai/skybridge",
+      "sourceType": "github",
+      "computedHash": "c29261ddcda5ee91e9bac197116124734fda5aa3109c90b37db0c7d95392e2cf"
+    },
+    "skybridge": {
+      "source": "alpic-ai/skybridge",
+      "sourceType": "github",
+      "computedHash": "f8cca24bce78fe6bf48f4fa334841d1ac2be121762bf8b06c48076ce9a2734ce"
+    }
+  }
+}
