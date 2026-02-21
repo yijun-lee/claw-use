@@ -1,4 +1,5 @@
 import { MCPServer, oauthCustomProvider, object, text, widget } from "mcp-use/server";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { OpenClawClient } from "./lib/openclaw-client.js";
 import { getUserSettings, saveUserSettings } from "./lib/supabase.js";
@@ -8,13 +9,14 @@ const client = new OpenClawClient();
 
 const projectId = process.env.MCP_USE_OAUTH_SUPABASE_PROJECT_ID!;
 const supabaseUrl = `https://${projectId}.supabase.co`;
+const baseUrl = process.env.MCP_URL || "http://localhost:3000";
 
 const server = new MCPServer({
   name: "claw-use",
   title: "OpenClaw Dashboard",
   version: "1.0.0",
   description: "OpenClaw agent task dashboard — manage tasks, monitor metrics, and control agent workflows",
-  baseUrl: process.env.MCP_URL || "http://localhost:3000",
+  baseUrl,
   favicon: "favicon.ico",
   websiteUrl: "https://openclaw.io",
   icons: [
@@ -43,6 +45,40 @@ const server = new MCPServer({
       email: payload.email as string,
     }),
   }),
+});
+
+// ---------------------------------------------------------------------------
+// Dynamic Client Registration (RFC 7591) — required by MCP spec
+// ---------------------------------------------------------------------------
+
+server.post("/register", async (c) => {
+  const body = await c.req.json();
+  return c.json(
+    {
+      client_id: randomUUID(),
+      client_name: body.client_name || "mcp-client",
+      redirect_uris: body.redirect_uris || [],
+      grant_types: body.grant_types || ["authorization_code"],
+      response_types: body.response_types || ["code"],
+      token_endpoint_auth_method: body.token_endpoint_auth_method || "none",
+    },
+    201,
+  );
+});
+
+// Override auth server metadata to include registration_endpoint
+server.get("/.well-known/oauth-authorization-server", async (c) => {
+  return c.json({
+    issuer: `${supabaseUrl}/auth/v1`,
+    authorization_endpoint: `${baseUrl}/authorize`,
+    token_endpoint: `${baseUrl}/token`,
+    registration_endpoint: `${baseUrl}/register`,
+    response_types_supported: ["code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+    scopes_supported: [],
+  });
 });
 
 // ---------------------------------------------------------------------------
