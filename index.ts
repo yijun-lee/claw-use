@@ -4,6 +4,7 @@ import { OpenClawClient } from "./lib/openclaw-client.js";
 import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
+const baseUrl = process.env.MCP_URL || "http://localhost:3000";
 
 // In-memory connection store — each user enters their own credentials via setup screen
 let currentConnection: GatewayOverrides | null = null;
@@ -17,6 +18,7 @@ const server = new MCPServer({
   title: "OpenClaw Dashboard",
   version: "1.0.0",
   description: "OpenClaw agent task dashboard — manage tasks, monitor metrics, and control agent workflows",
+  baseUrl,
   favicon: "favicon.ico",
   websiteUrl: "https://openclaw.io",
   icons: [
