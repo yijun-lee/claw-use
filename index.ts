@@ -6,6 +6,20 @@ import type { GatewayOverrides } from "./lib/openclaw-client.js";
 
 const client = new OpenClawClient();
 
+// Wrap Supabase provider with "direct" mode so ChatGPT can discover
+// the auth server metadata from the MCP server itself (not Supabase).
+const supabaseProvider = oauthSupabaseProvider();
+const oauthProvider = {
+  verifyToken: (token: string) => supabaseProvider.verifyToken(token),
+  getUserInfo: (payload: Record<string, unknown>) => supabaseProvider.getUserInfo(payload),
+  getIssuer: () => supabaseProvider.getIssuer(),
+  getAuthEndpoint: () => supabaseProvider.getAuthEndpoint(),
+  getTokenEndpoint: () => supabaseProvider.getTokenEndpoint(),
+  getScopesSupported: () => supabaseProvider.getScopesSupported(),
+  getGrantTypesSupported: () => supabaseProvider.getGrantTypesSupported(),
+  getMode: () => "direct" as const,
+};
+
 const server = new MCPServer({
   name: "claw-use",
   title: "OpenClaw Dashboard",
@@ -21,7 +35,7 @@ const server = new MCPServer({
       sizes: ["512x512"],
     },
   ],
-  oauth: oauthSupabaseProvider(),
+  oauth: oauthProvider,
 });
 
 // ---------------------------------------------------------------------------
