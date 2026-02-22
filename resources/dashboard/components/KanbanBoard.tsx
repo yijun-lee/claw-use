@@ -84,8 +84,21 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
                     className="rounded-lg border border-default bg-surface px-3 py-2 cursor-pointer hover:bg-surface-elevated transition-colors group"
                     onClick={() => onSelectTask(task)}
                   >
-                    {/* Top row: dot + title + meta */}
+                    {/* Top row: delete + dot + title + meta */}
                     <div className="flex items-center gap-2">
+                      {/* Delete button */}
+                      {onDeleteTask && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
+                          className="shrink-0 p-0.5 rounded hover:bg-red-500/10 text-tertiary hover:text-red-500"
+                          title="Remove"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
                       <div className={`w-2 h-2 rounded-full shrink-0 ${col.dotClass}`} />
                       <span className="text-sm font-medium text-default truncate flex-1 min-w-0">
                         {task.title}
@@ -115,20 +128,6 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
                       <span className="text-[11px] text-secondary shrink-0 w-12 text-right">
                         {timeAgo(task.updatedAt)}
                       </span>
-
-                      {/* Delete button */}
-                      {onDeleteTask && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
-                          className="shrink-0 p-0.5 rounded hover:bg-red-500/10 text-tertiary hover:text-red-500"
-                          title="Remove"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      )}
                     </div>
 
                     {/* Bottom row: last message preview */}
