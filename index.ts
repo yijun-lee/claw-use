@@ -236,6 +236,81 @@ server.tool(
   }
 );
 
+// ---------------------------------------------------------------------------
+// Tool 7: send-message — send a message to an OpenClaw session and get reply
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "send-message",
+    description:
+      "Send a message to an OpenClaw agent session and receive the agent's reply. " +
+      "Use this to give instructions, ask questions, or trigger actions on a running agent. " +
+      "Provide a sessionKey (e.g. 'agent:main:main') to target a specific session.",
+    schema: z.object({
+      sessionKey: z.string().describe("Session key to send the message to (e.g. 'agent:main:main')"),
+      message: z.string().describe("The message to send to the agent"),
+    }),
+  },
+  async ({ sessionKey, message }) => {
+    const conn = getConnection();
+    if (!conn) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
+    }
+    const result = await client.sendMessage(conn, sessionKey, message);
+    return object(result);
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool 8: list-sessions — quick list of available sessions for reference
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "list-sessions",
+    description:
+      "List all active OpenClaw sessions with their keys, channels, and token usage. " +
+      "Use this to find session keys before sending messages.",
+    schema: z.object({}),
+    annotations: { readOnlyHint: true },
+  },
+  async () => {
+    const conn = getConnection();
+    if (!conn) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
+    }
+    const sessions = await client.listSessions(conn);
+    return object({ sessions });
+  }
+);
+
+// ---------------------------------------------------------------------------
+// Tool 9: get-session-history — get conversation history for a session
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "get-session-history",
+    description:
+      "Get the conversation history of a specific OpenClaw session. " +
+      "Returns the last N messages (default 10) for context.",
+    schema: z.object({
+      sessionKey: z.string().describe("Session key (e.g. 'agent:main:main')"),
+      limit: z.number().optional().describe("Number of recent messages to return (default 10)"),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ sessionKey, limit }) => {
+    const conn = getConnection();
+    if (!conn) {
+      return text("Gateway not configured. Please use connect-openclaw first.");
+    }
+    const history = await client.getSessionHistory(conn, sessionKey, limit ?? 10);
+    return object(history);
+  }
+);
+
 server.listen().then(() => {
   console.log("OpenClaw Dashboard server running");
 });

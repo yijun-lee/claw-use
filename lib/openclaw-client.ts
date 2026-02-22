@@ -268,6 +268,79 @@ export class OpenClawClient {
     };
   }
 
+  // --- Interactive: send messages, list sessions, get history ---------------
+
+  async sendMessage(
+    overrides: GatewayOverrides,
+    sessionKey: string,
+    message: string,
+  ): Promise<Record<string, unknown>> {
+    const response = await this.invokeGatewayTool(overrides, "sessions_send", {
+      sessionKey,
+      message,
+    });
+    if (!response.ok) {
+      throw new OpenClawApiError(
+        502,
+        "GATEWAY_ERROR",
+        response.error?.message || "sessions_send failed",
+      );
+    }
+    const result = response.result as Record<string, unknown>;
+    const details = (result.details || {}) as Record<string, unknown>;
+    return {
+      status: details.status,
+      reply: details.reply || null,
+      sessionKey: details.sessionKey,
+      runId: details.runId,
+    };
+  }
+
+  async listSessions(
+    overrides: GatewayOverrides,
+  ): Promise<Array<{ key: string; channel: string; model: string; tokens: number; updatedAt: string }>> {
+    const sessions = await this.fetchSessions(overrides);
+    return sessions.map((s) => ({
+      key: s.key,
+      channel: s.channel || "unknown",
+      model: s.model || "unknown",
+      tokens: s.totalTokens || 0,
+      updatedAt: new Date(s.updatedAt).toISOString(),
+    }));
+  }
+
+  async getSessionHistory(
+    overrides: GatewayOverrides,
+    sessionKey: string,
+    limit: number,
+  ): Promise<{ sessionKey: string; messages: Array<{ role: string; text: string; timestamp: string }> }> {
+    const response = await this.invokeGatewayTool(overrides, "sessions_history", { sessionKey });
+    if (!response.ok || !response.result) {
+      throw new OpenClawApiError(502, "GATEWAY_ERROR", "sessions_history failed");
+    }
+    const result = response.result as Record<string, unknown>;
+    const content = result.content as Array<{ type: string; text: string }> | undefined;
+    if (!content?.[0]?.text) return { sessionKey, messages: [] };
+
+    const parsed = JSON.parse(content[0].text) as {
+      messages: Array<{ role: string; content: unknown; timestamp?: number; model?: string }>;
+    };
+    const msgs = (parsed.messages || []).slice(-limit).map((m) => {
+      let text = "";
+      if (typeof m.content === "string") {
+        text = m.content;
+      } else if (Array.isArray(m.content)) {
+        text = (m.content as Array<{ text?: string }>).map((c) => c.text || "").join("\n");
+      }
+      return {
+        role: m.role,
+        text,
+        timestamp: m.timestamp ? new Date(m.timestamp).toISOString() : "",
+      };
+    });
+    return { sessionKey, messages: msgs };
+  }
+
   async getMetrics(overrides: GatewayOverrides): Promise<MetricsSummary> {
     const sessions = await this.fetchSessions(overrides);
     const mappedTasks = sessions.map(mapSessionToTask);
