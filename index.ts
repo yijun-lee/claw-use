@@ -161,7 +161,8 @@ server.tool(
       "Use this to give instructions, ask questions, or trigger actions. " +
       "You need the session key — call list-sessions first to find available session keys. " +
       "Common session keys: 'agent:main:main' for the main webchat agent. " +
-      "The agent will process the message and return a reply.",
+      "The agent will process the message and return a reply. " +
+      "The response also includes updated dashboard data so the widget refreshes automatically.",
     schema: z.object({
       sessionKey: z
         .string()
@@ -178,7 +179,18 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const result = await client.sendMessage(conn, sessionKey, message);
-    return object(result);
+
+    // Fetch updated dashboard so the widget refreshes
+    const dashboard = await client.getDashboard(conn);
+
+    return object({
+      ...result,
+      dashboard: {
+        tasks: dashboard.tasks,
+        metrics: dashboard.metrics,
+        lastUpdated: dashboard.lastUpdated,
+      },
+    });
   }
 );
 
@@ -314,7 +326,8 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const updated = await client.updateTask(conn, params);
-    return object({ success: true, task: updated });
+    const dashboard = await client.getDashboard(conn);
+    return object({ success: true, task: updated, dashboard });
   }
 );
 
@@ -346,7 +359,8 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const created = await client.createTask(conn, params);
-    return object({ success: true, task: created });
+    const dashboard = await client.getDashboard(conn);
+    return object({ success: true, task: created, dashboard });
   }
 );
 
