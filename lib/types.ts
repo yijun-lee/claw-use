@@ -63,9 +63,14 @@ export interface OpenClawSession {
   displayName?: string;
   channel?: string;
   label?: string;
+  kind?: string;
   model?: string;
   totalTokens?: number;
   contextTokens?: number;
+  systemSent?: boolean;
+  abortedLastRun?: boolean;
+  lastChannel?: string;
+  deliveryContext?: { channel?: string; to?: string };
 }
 
 export interface ToolInvokeResponse {

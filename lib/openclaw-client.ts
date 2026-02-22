@@ -27,6 +27,9 @@ const ACTIVE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function inferStatus(session: OpenClawSession): TaskStatus {
+  // Heartbeat sessions
+  if (session.deliveryContext?.to === "heartbeat") return "heartbeat";
+
   const age = Date.now() - session.updatedAt;
 
   if (age < ACTIVE_THRESHOLD_MS) return "in-progress";
@@ -36,10 +39,19 @@ function inferStatus(session: OpenClawSession): TaskStatus {
 
 function mapSessionToTask(session: OpenClawSession): Task {
   const ts = new Date(session.updatedAt).toISOString();
+  const tokens = session.totalTokens || 0;
+  const model = session.model || "";
+
+  // Build description from available data
+  const parts: string[] = [];
+  if (session.label) parts.push(session.label);
+  if (model) parts.push(`Model: ${model}`);
+  if (tokens > 0) parts.push(`Tokens: ${tokens.toLocaleString()}`);
+
   return {
     id: session.key,
     title: session.displayName || session.label || session.key,
-    description: session.label || "",
+    description: parts.join(" | "),
     status: inferStatus(session),
     priority: "medium",
     assignee: session.channel || "unassigned",
@@ -261,17 +273,41 @@ export class OpenClawClient {
   // --- Metrics aggregation -------------------------------------------------
 
   private computeMetrics(
-    _sessions: OpenClawSession[],
+    sessions: OpenClawSession[],
     mappedTasks: Task[],
   ): MetricsSummary {
     const total = mappedTasks.length;
     const completed = mappedTasks.filter((t) => t.status === "done").length;
+    const active = mappedTasks.filter((t) => t.status === "in-progress").length;
+
+    // Sum actual token usage from all sessions
+    const totalTokens = sessions.reduce((sum, s) => sum + (s.totalTokens || 0), 0);
+
+    // Estimate cost based on model pricing (Claude Opus ~$15/M input, ~$75/M output)
+    // Rough estimate: assume ~30% output tokens, blended rate ~$33/M
+    const estimatedCostUSD = (totalTokens / 1_000_000) * 33;
+
+    // Success rate: sessions that completed without abort
+    const nonHeartbeat = sessions.filter((s) => s.deliveryContext?.to !== "heartbeat");
+    const successCount = nonHeartbeat.filter((s) => !s.abortedLastRun).length;
+    const successRate = nonHeartbeat.length > 0
+      ? Math.round((successCount / nonHeartbeat.length) * 100)
+      : 100;
+
+    // Average session age as a proxy for response activity
+    const now = Date.now();
+    const ages = sessions
+      .filter((s) => s.updatedAt > 0)
+      .map((s) => now - s.updatedAt);
+    const avgResponseTimeMs = ages.length > 0
+      ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length)
+      : 0;
 
     return {
-      totalTokens: 0,
-      estimatedCostUSD: 0,
-      successRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-      avgResponseTimeMs: 0,
+      totalTokens,
+      estimatedCostUSD,
+      successRate,
+      avgResponseTimeMs,
       totalTasks: total,
       completedTasks: completed,
     };

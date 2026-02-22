@@ -8,8 +8,11 @@ interface MetricsSummaryProps {
   isRefreshing: boolean;
 }
 
-function formatTime(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+function formatDuration(ms: number): string {
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m`;
+  if (ms < 86_400_000) return `${(ms / 3_600_000).toFixed(1)}h`;
+  return `${Math.round(ms / 86_400_000)}d`;
 }
 
 function timeAgo(isoString: string): string {
@@ -18,7 +21,8 @@ function timeAgo(isoString: string): string {
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hours = Math.floor(mins / 60);
-  return `${hours}h ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
@@ -36,10 +40,12 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
         </div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-lg font-bold text-default">
-            {metrics.totalTokens.toLocaleString()}
+            {metrics.totalTokens >= 1000
+              ? `${(metrics.totalTokens / 1000).toFixed(1)}k`
+              : metrics.totalTokens.toLocaleString()}
           </span>
           <span className="text-xs text-secondary">
-            ${metrics.estimatedCostUSD.toFixed(2)}
+            ~${metrics.estimatedCostUSD.toFixed(2)}
           </span>
         </div>
       </div>
@@ -62,13 +68,18 @@ export const MetricsSummary: React.FC<MetricsSummaryProps> = ({
         </div>
       </div>
 
-      {/* Avg Response */}
+      {/* Sessions / Activity */}
       <div className="flex-1 min-w-[140px] rounded-xl border border-default bg-surface p-3">
         <div className="text-[11px] font-medium text-secondary uppercase tracking-wider mb-1">
-          Avg Response
+          Sessions
         </div>
-        <div className="text-lg font-bold text-default">
-          {formatTime(metrics.avgResponseTimeMs)}
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-lg font-bold text-default">
+            {metrics.totalTasks}
+          </span>
+          <span className="text-xs text-secondary">
+            avg {formatDuration(metrics.avgResponseTimeMs)} ago
+          </span>
         </div>
       </div>
 
