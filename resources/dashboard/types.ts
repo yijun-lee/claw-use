@@ -17,6 +17,9 @@ export const taskSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   feedback: z.array(taskFeedbackSchema),
+  tokens: z.number().optional(),
+  model: z.string().optional(),
+  contextPercent: z.number().optional(),
 });
 
 export const metricsSchema = z.object({
@@ -26,6 +29,8 @@ export const metricsSchema = z.object({
   avgResponseTimeMs: z.number(),
   totalTasks: z.number(),
   completedTasks: z.number(),
+  contextUtilization: z.number().optional(),
+  channelBreakdown: z.record(z.string(), z.number()).optional(),
 });
 
 export const propSchema = z.object({
@@ -51,7 +56,15 @@ export interface ColumnConfig {
   dotClass: string;
 }
 
+// Columns relabeled for monitoring context
 export const COLUMNS: ColumnConfig[] = [
+  {
+    id: "in-progress",
+    label: "Active",
+    bgClass: "bg-emerald-500/10",
+    borderClass: "border-emerald-500/30",
+    dotClass: "bg-emerald-500",
+  },
   {
     id: "heartbeat",
     label: "Heartbeat",
@@ -61,32 +74,25 @@ export const COLUMNS: ColumnConfig[] = [
   },
   {
     id: "backlog",
-    label: "Backlog",
-    bgClass: "bg-gray-500/10",
-    borderClass: "border-gray-500/30",
-    dotClass: "bg-gray-500",
-  },
-  {
-    id: "todo",
-    label: "To-Do",
+    label: "Scheduled",
     bgClass: "bg-blue-500/10",
     borderClass: "border-blue-500/30",
     dotClass: "bg-blue-500",
   },
   {
-    id: "in-progress",
-    label: "In Progress",
+    id: "todo",
+    label: "Chat",
     bgClass: "bg-amber-500/10",
     borderClass: "border-amber-500/30",
     dotClass: "bg-amber-500",
   },
   {
     id: "done",
-    label: "Done",
-    bgClass: "bg-emerald-500/10",
-    borderClass: "border-emerald-500/30",
-    dotClass: "bg-emerald-500",
+    label: "Idle",
+    bgClass: "bg-gray-500/10",
+    borderClass: "border-gray-500/30",
+    dotClass: "bg-gray-500",
   },
 ];
 
-export const STATUS_ORDER: TaskStatus[] = ["heartbeat", "backlog", "todo", "in-progress", "done"];
+export const STATUS_ORDER: TaskStatus[] = ["in-progress", "heartbeat", "backlog", "todo", "done"];

@@ -24,40 +24,62 @@ function getAgentId(): string {
 // ---------------------------------------------------------------------------
 
 const ACTIVE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
-const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
+const RECENT_THRESHOLD_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 function inferStatus(session: OpenClawSession): TaskStatus {
   // Heartbeat sessions
   if (session.deliveryContext?.to === "heartbeat") return "heartbeat";
 
+  // Cron / scheduled jobs
+  if (session.label?.startsWith("Cron:") || (session.channel === "unknown" && session.label)) {
+    return "backlog"; // "Scheduled"
+  }
+
   const age = Date.now() - session.updatedAt;
 
-  if (age < ACTIVE_THRESHOLD_MS) return "in-progress";
-  if (age < STALE_THRESHOLD_MS) return "todo";
-  return "done";
+  // Active: updated in last 10 minutes
+  if (age < ACTIVE_THRESHOLD_MS) return "in-progress"; // "Active"
+
+  // Chat: discord/webchat sessions still recent
+  if (age < RECENT_THRESHOLD_MS) return "todo"; // "Chat"
+
+  // Idle: old sessions
+  return "done"; // "Idle"
 }
 
 function mapSessionToTask(session: OpenClawSession): Task {
   const ts = new Date(session.updatedAt).toISOString();
   const tokens = session.totalTokens || 0;
   const model = session.model || "";
+  const contextTokens = session.contextTokens || 0;
+  const contextPercent = contextTokens > 0 ? Math.round((tokens / contextTokens) * 100) : 0;
 
-  // Build description from available data
+  // Build a readable description
   const parts: string[] = [];
   if (session.label) parts.push(session.label);
-  if (model) parts.push(`Model: ${model}`);
-  if (tokens > 0) parts.push(`Tokens: ${tokens.toLocaleString()}`);
+  if (model) parts.push(model);
+  if (tokens > 0) {
+    const tokenStr = tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k` : `${tokens}`;
+    parts.push(`${tokenStr} tokens`);
+  }
+  if (contextPercent > 0) parts.push(`${contextPercent}% ctx`);
+
+  // Determine channel label
+  const channel = session.channel || "unknown";
 
   return {
     id: session.key,
     title: session.displayName || session.label || session.key,
-    description: parts.join(" | "),
+    description: parts.join(" · "),
     status: inferStatus(session),
     priority: "medium",
-    assignee: session.channel || "unassigned",
+    assignee: channel,
     createdAt: ts,
     updatedAt: ts,
     feedback: [],
+    tokens,
+    model,
+    contextPercent,
   };
 }
 
@@ -70,7 +92,7 @@ export interface GatewayOverrides {
   gatewayToken?: string;
 }
 
-const STATUS_ORDER: TaskStatus[] = ["heartbeat", "backlog", "todo", "in-progress", "done"];
+const STATUS_ORDER: TaskStatus[] = ["in-progress", "heartbeat", "backlog", "todo", "done"];
 
 export class OpenClawClient {
   // --- Gateway HTTP helpers ------------------------------------------------
@@ -278,23 +300,22 @@ export class OpenClawClient {
   ): MetricsSummary {
     const total = mappedTasks.length;
     const completed = mappedTasks.filter((t) => t.status === "done").length;
-    const active = mappedTasks.filter((t) => t.status === "in-progress").length;
 
     // Sum actual token usage from all sessions
     const totalTokens = sessions.reduce((sum, s) => sum + (s.totalTokens || 0), 0);
+    const totalContext = sessions.reduce((sum, s) => sum + (s.contextTokens || 0), 0);
 
-    // Estimate cost based on model pricing (Claude Opus ~$15/M input, ~$75/M output)
-    // Rough estimate: assume ~30% output tokens, blended rate ~$33/M
+    // Estimate cost (Claude Opus blended ~$33/M tokens)
     const estimatedCostUSD = (totalTokens / 1_000_000) * 33;
 
-    // Success rate: sessions that completed without abort
+    // Success rate: sessions not aborted
     const nonHeartbeat = sessions.filter((s) => s.deliveryContext?.to !== "heartbeat");
     const successCount = nonHeartbeat.filter((s) => !s.abortedLastRun).length;
     const successRate = nonHeartbeat.length > 0
       ? Math.round((successCount / nonHeartbeat.length) * 100)
       : 100;
 
-    // Average session age as a proxy for response activity
+    // Average session age
     const now = Date.now();
     const ages = sessions
       .filter((s) => s.updatedAt > 0)
@@ -303,6 +324,18 @@ export class OpenClawClient {
       ? Math.round(ages.reduce((a, b) => a + b, 0) / ages.length)
       : 0;
 
+    // Context utilization: how much of the total context windows is used
+    const contextUtilization = totalContext > 0
+      ? Math.round((totalTokens / totalContext) * 100)
+      : 0;
+
+    // Channel breakdown: tokens per channel
+    const channelBreakdown: Record<string, number> = {};
+    for (const s of sessions) {
+      const ch = s.channel || "unknown";
+      channelBreakdown[ch] = (channelBreakdown[ch] || 0) + (s.totalTokens || 0);
+    }
+
     return {
       totalTokens,
       estimatedCostUSD,
@@ -310,6 +343,8 @@ export class OpenClawClient {
       avgResponseTimeMs,
       totalTasks: total,
       completedTasks: completed,
+      contextUtilization,
+      channelBreakdown,
     };
   }
 }

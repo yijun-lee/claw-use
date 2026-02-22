@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 import type { TaskItem, TaskStatus } from "../types";
 import { COLUMNS, STATUS_ORDER } from "../types";
-import { StatusBadge } from "./StatusBadge";
 
 interface TaskListProps {
   tasks: TaskItem[];
@@ -21,7 +20,11 @@ function timeAgo(isoString: string): string {
   return `${days}d ago`;
 }
 
-const COLUMN_MAP = Object.fromEntries(COLUMNS.map((c) => [c.id, c]));
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return `${n}`;
+}
 
 export const KanbanBoard: React.FC<TaskListProps> = ({
   tasks,
@@ -45,10 +48,10 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
     return map;
   }, [tasks]);
 
-  const INLINE_LIMIT = 3;
+  const INLINE_LIMIT = 5;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {COLUMNS.map((col) => {
         const colTasks = grouped[col.id];
         const visible = isExpanded ? colTasks : colTasks.slice(0, INLINE_LIMIT);
@@ -68,16 +71,15 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
             </div>
 
             {/* Task rows */}
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1">
               {visible.map((task) => {
-                const statusIdx = STATUS_ORDER.indexOf(task.status as TaskStatus);
-                const canLeft = statusIdx > 0;
-                const canRight = statusIdx < STATUS_ORDER.length - 1;
+                const tokens = task.tokens || 0;
+                const ctxPct = task.contextPercent || 0;
 
                 return (
                   <div
                     key={task.id}
-                    className="flex items-center gap-3 rounded-lg border border-default bg-surface px-3 py-2 cursor-pointer hover:bg-surface-elevated transition-colors group"
+                    className="flex items-center gap-2 rounded-lg border border-default bg-surface px-3 py-2 cursor-pointer hover:bg-surface-elevated transition-colors group"
                     onClick={() => onSelectTask(task)}
                   >
                     {/* Status dot */}
@@ -88,48 +90,41 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
                       {task.title}
                     </span>
 
-                    {/* Priority */}
-                    <StatusBadge priority={task.priority} />
+                    {/* Token count */}
+                    {tokens > 0 && (
+                      <span className="text-[11px] text-secondary shrink-0 font-mono">
+                        {formatTokens(tokens)}
+                      </span>
+                    )}
 
-                    {/* Assignee */}
-                    <span className="text-[11px] text-secondary shrink-0 hidden sm:inline">
+                    {/* Context bar */}
+                    {ctxPct > 0 && (
+                      <div className="w-12 h-1.5 rounded-full bg-default/10 overflow-hidden shrink-0" title={`${ctxPct}% context used`}>
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            ctxPct > 80 ? "bg-red-500" : ctxPct > 50 ? "bg-amber-500" : "bg-emerald-500"
+                          }`}
+                          style={{ width: `${Math.min(ctxPct, 100)}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Channel */}
+                    <span className="text-[10px] text-tertiary shrink-0 uppercase">
                       {task.assignee}
                     </span>
 
                     {/* Time */}
-                    <span className="text-[11px] text-secondary shrink-0 w-14 text-right">
+                    <span className="text-[11px] text-secondary shrink-0 w-12 text-right">
                       {timeAgo(task.updatedAt)}
                     </span>
-
-                    {/* Move buttons */}
-                    <div
-                      className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <button
-                        onClick={canLeft ? () => onMoveTask(task.id, "left") : undefined}
-                        disabled={!canLeft}
-                        className="px-1.5 py-0.5 text-[11px] rounded hover:bg-default/10 disabled:opacity-20 cursor-pointer disabled:cursor-default"
-                        title="Move to previous status"
-                      >
-                        ←
-                      </button>
-                      <button
-                        onClick={canRight ? () => onMoveTask(task.id, "right") : undefined}
-                        disabled={!canRight}
-                        className="px-1.5 py-0.5 text-[11px] rounded hover:bg-default/10 disabled:opacity-20 cursor-pointer disabled:cursor-default"
-                        title="Move to next status"
-                      >
-                        →
-                      </button>
-                    </div>
                   </div>
                 );
               })}
 
               {colTasks.length === 0 && (
-                <div className="text-xs text-secondary text-center py-3 opacity-40">
-                  No tasks
+                <div className="text-xs text-secondary text-center py-2 opacity-40">
+                  No sessions
                 </div>
               )}
 
@@ -142,12 +137,6 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
           </div>
         );
       })}
-
-      {tasks.length === 0 && (
-        <div className="text-sm text-secondary text-center py-8 opacity-50">
-          No tasks
-        </div>
-      )}
     </div>
   );
 };

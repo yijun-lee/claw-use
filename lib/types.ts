@@ -19,6 +19,9 @@ export interface Task {
   createdAt: string;
   updatedAt: string;
   feedback: TaskFeedback[];
+  tokens?: number;
+  model?: string;
+  contextPercent?: number;
 }
 
 export interface MetricsSummary {
@@ -28,6 +31,8 @@ export interface MetricsSummary {
   avgResponseTimeMs: number;
   totalTasks: number;
   completedTasks: number;
+  contextUtilization?: number;
+  channelBreakdown?: Record<string, number>;
 }
 
 export interface DashboardData {
