@@ -354,7 +354,7 @@ export class OpenClawClient {
     if (input.assignee) parts.push(`Assignee: ${input.assignee}`);
     if (input.status) parts.push(`Status: ${input.status}`);
 
-    await this.sendHookAgent(overrides, parts.join("\n"));
+    await this.sendMessage(overrides, "agent:main:main", parts.join("\n"));
 
     return {
       id: `pending-${Date.now()}`,
@@ -378,7 +378,7 @@ export class OpenClawClient {
     if (update.priority) parts.push(`Priority → ${update.priority}`);
     if (update.feedback) parts.push(`Feedback: ${update.feedback}`);
 
-    await this.sendHookAgent(overrides, parts.join("\n"));
+    await this.sendMessage(overrides, "agent:main:main", parts.join("\n"));
 
     return {
       id: update.taskId,
