@@ -162,7 +162,8 @@ server.tool(
       "You need the session key — call list-sessions first to find available session keys. " +
       "Common session keys: 'agent:main:main' for the main webchat agent. " +
       "The agent will process the message and return a reply. " +
-      "The response also includes updated dashboard data so the widget refreshes automatically.",
+      "The response includes updated dashboard data. " +
+      "IMPORTANT: After using send-message, call get-dashboard to update the visual widget.",
     schema: z.object({
       sessionKey: z
         .string()

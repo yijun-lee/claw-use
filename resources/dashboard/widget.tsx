@@ -47,6 +47,7 @@ const DEFAULT_METRICS: MetricsData = {
 type RefreshArgs = { filter?: string } | null;
 type UpdateArgs = Record<string, unknown> | null;
 type ConnectArgs = { gatewayUrl: string; gatewayToken?: string } | null;
+type SendMessageArgs = { sessionKey: string; message: string } | null;
 // ---------------------------------------------------------------------------
 // Setup Screen — shown when no Gateway URL is configured
 // ---------------------------------------------------------------------------
@@ -224,7 +225,14 @@ const Dashboard: React.FC = () => {
     callToolAsync: updateTaskAsync,
   } = useCallTool<UpdateArgs>("update-task");
 
+  const {
+    callToolAsync: sendMessageAsync,
+    isPending: isSending,
+  } = useCallTool<SendMessageArgs>("send-message");
+
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
+  const [messageInput, setMessageInput] = useState("");
+  const [lastReply, setLastReply] = useState<string | null>(null);
 
   // Determine current screen: state overrides props
   const screen = state?.screen ?? props?.screen ?? "dashboard";
@@ -325,6 +333,38 @@ const Dashboard: React.FC = () => {
       }
     },
     [tasks, metrics, lastUpdated, setState, updateTaskAsync]
+  );
+
+  const handleSendMessage = useCallback(
+    async () => {
+      const msg = messageInput.trim();
+      if (!msg) return;
+      setMessageInput("");
+      setLastReply(null);
+      try {
+        const result = await sendMessageAsync({
+          sessionKey: "agent:main:main",
+          message: msg,
+        });
+        if (result?.structuredContent) {
+          const data = result.structuredContent as unknown as {
+            reply?: string;
+            dashboard?: DashboardState;
+          };
+          if (data.reply) setLastReply(data.reply);
+          if (data.dashboard) {
+            setState({
+              tasks: data.dashboard.tasks,
+              metrics: data.dashboard.metrics,
+              lastUpdated: data.dashboard.lastUpdated,
+            });
+          }
+        }
+      } catch {
+        setLastReply("Failed to send message.");
+      }
+    },
+    [messageInput, sendMessageAsync, setState]
   );
 
   const handleAskAI = useCallback(
@@ -464,6 +504,36 @@ const Dashboard: React.FC = () => {
               onMoveTask={handleMoveTask}
               onSelectTask={setSelectedTask}
             />
+          </div>
+
+          {/* Message bar */}
+          <div className="px-4 pb-3">
+            {lastReply && (
+              <div className="mb-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-default">
+                <span className="text-emerald-500 font-medium">Agent: </span>
+                {lastReply}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={messageInput}
+                onChange={(e) => setMessageInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !isSending && handleSendMessage()}
+                placeholder="Send a message to agent..."
+                className="flex-1 px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                disabled={isSending}
+              />
+              <Button
+                color="primary"
+                size="lg"
+                variant="solid"
+                onClick={handleSendMessage}
+                disabled={isSending || !messageInput.trim()}
+              >
+                {isSending ? "..." : "Send"}
+              </Button>
+            </div>
           </div>
 
           {/* Task detail modal */}
