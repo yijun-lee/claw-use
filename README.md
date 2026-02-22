@@ -1,4 +1,4 @@
-# claw-use — AI Agent Command Center as an MCP App
+# claw-use — OpenClaw Command Center as an MCP App
 
 > **Dashboards show. MCP Apps think and act.**
 >
