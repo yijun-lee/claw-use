@@ -373,6 +373,14 @@ server.tool(
   async ({ taskId }) => {
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
+
+    // Send a close/end message to the session
+    try {
+      await client.sendMessage(conn, taskId, "Session closed by user via claw-use dashboard.");
+    } catch {
+      // Session might not accept messages — still remove from view
+    }
+
     return object({ success: true, deletedTaskId: taskId });
   }
 );
