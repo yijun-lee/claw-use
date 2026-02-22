@@ -79,45 +79,55 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
                 return (
                   <div
                     key={task.id}
-                    className="flex items-center gap-2 rounded-lg border border-default bg-surface px-3 py-2 cursor-pointer hover:bg-surface-elevated transition-colors group"
+                    className="rounded-lg border border-default bg-surface px-3 py-2 cursor-pointer hover:bg-surface-elevated transition-colors group"
                     onClick={() => onSelectTask(task)}
                   >
-                    {/* Status dot */}
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${col.dotClass}`} />
-
-                    {/* Title */}
-                    <span className="text-sm font-medium text-default truncate flex-1 min-w-0">
-                      {task.title}
-                    </span>
-
-                    {/* Token count */}
-                    {tokens > 0 && (
-                      <span className="text-[11px] text-secondary shrink-0 font-mono">
-                        {formatTokens(tokens)}
+                    {/* Top row: dot + title + meta */}
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${col.dotClass}`} />
+                      <span className="text-sm font-medium text-default truncate flex-1 min-w-0">
+                        {task.title}
                       </span>
-                    )}
 
-                    {/* Context bar */}
-                    {ctxPct > 0 && (
-                      <div className="w-12 h-1.5 rounded-full bg-default/10 overflow-hidden shrink-0" title={`${ctxPct}% context used`}>
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            ctxPct > 80 ? "bg-red-500" : ctxPct > 50 ? "bg-amber-500" : "bg-emerald-500"
-                          }`}
-                          style={{ width: `${Math.min(ctxPct, 100)}%` }}
-                        />
+                      {tokens > 0 && (
+                        <span className="text-[11px] text-secondary shrink-0 font-mono">
+                          {formatTokens(tokens)}
+                        </span>
+                      )}
+
+                      {ctxPct > 0 && (
+                        <div className="w-10 h-1.5 rounded-full bg-default/10 overflow-hidden shrink-0" title={`${ctxPct}% context used`}>
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              ctxPct > 80 ? "bg-red-500" : ctxPct > 50 ? "bg-amber-500" : "bg-emerald-500"
+                            }`}
+                            style={{ width: `${Math.min(ctxPct, 100)}%` }}
+                          />
+                        </div>
+                      )}
+
+                      <span className="text-[10px] text-tertiary shrink-0 uppercase">
+                        {task.assignee}
+                      </span>
+
+                      <span className="text-[11px] text-secondary shrink-0 w-12 text-right">
+                        {timeAgo(task.updatedAt)}
+                      </span>
+                    </div>
+
+                    {/* Bottom row: last message preview */}
+                    {(task.lastMessage || task.description) && (
+                      <div className="flex items-center gap-2 mt-1 ml-4">
+                        <p className="text-[11px] text-secondary truncate flex-1">
+                          {task.lastMessage || task.description}
+                        </p>
+                        {(task.messageCount ?? 0) > 0 && (
+                          <span className="text-[10px] text-tertiary shrink-0">
+                            {task.messageCount} msgs
+                          </span>
+                        )}
                       </div>
                     )}
-
-                    {/* Channel */}
-                    <span className="text-[10px] text-tertiary shrink-0 uppercase">
-                      {task.assignee}
-                    </span>
-
-                    {/* Time */}
-                    <span className="text-[11px] text-secondary shrink-0 w-12 text-right">
-                      {timeAgo(task.updatedAt)}
-                    </span>
                   </div>
                 );
               })}

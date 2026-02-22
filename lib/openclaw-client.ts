@@ -200,11 +200,60 @@ export class OpenClawClient {
     return sessions || [];
   }
 
+  private async fetchSessionSummary(
+    overrides: GatewayOverrides,
+    sessionKey: string,
+  ): Promise<{ lastMessage: string; messageCount: number }> {
+    try {
+      const response = await this.invokeGatewayTool(overrides, "sessions_history", { sessionKey });
+      if (!response.ok || !response.result) return { lastMessage: "", messageCount: 0 };
+
+      const result = response.result as Record<string, unknown>;
+      const content = result.content as Array<{ type: string; text: string }> | undefined;
+      if (!content?.[0]?.text) return { lastMessage: "", messageCount: 0 };
+
+      const parsed = JSON.parse(content[0].text) as {
+        messages: Array<{ role: string; content: unknown }>;
+      };
+      const msgs = parsed.messages || [];
+
+      // Find the last meaningful user message (skip heartbeat prompts)
+      let lastMsg = "";
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const m = msgs[i];
+        if (m.role !== "user") continue;
+        let text = "";
+        if (typeof m.content === "string") {
+          text = m.content;
+        } else if (Array.isArray(m.content)) {
+          text = (m.content as Array<{ text?: string }>)[0]?.text || "";
+        }
+        // Skip generic heartbeat prompts
+        if (text.startsWith("Read HEARTBEAT.md")) continue;
+        lastMsg = text.slice(0, 120);
+        break;
+      }
+
+      return { lastMessage: lastMsg, messageCount: msgs.length };
+    } catch {
+      return { lastMessage: "", messageCount: 0 };
+    }
+  }
+
   // --- Public API ----------------------------------------------------------
 
   async getDashboard(overrides: GatewayOverrides, filter?: string): Promise<DashboardData> {
     const sessions = await this.fetchSessions(overrides);
     let mappedTasks = sessions.map(mapSessionToTask);
+
+    // Fetch session summaries in parallel
+    const summaries = await Promise.all(
+      sessions.map((s) => this.fetchSessionSummary(overrides, s.key))
+    );
+    for (let i = 0; i < mappedTasks.length; i++) {
+      mappedTasks[i].lastMessage = summaries[i].lastMessage;
+      mappedTasks[i].messageCount = summaries[i].messageCount;
+    }
 
     if (filter && filter !== "all") {
       mappedTasks = mappedTasks.filter((t) => t.status === filter);

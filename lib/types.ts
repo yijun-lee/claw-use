@@ -22,6 +22,8 @@ export interface Task {
   tokens?: number;
   model?: string;
   contextPercent?: number;
+  lastMessage?: string;
+  messageCount?: number;
 }
 
 export interface MetricsSummary {

@@ -20,6 +20,8 @@ export const taskSchema = z.object({
   tokens: z.number().optional(),
   model: z.string().optional(),
   contextPercent: z.number().optional(),
+  lastMessage: z.string().optional(),
+  messageCount: z.number().optional(),
 });
 
 export const metricsSchema = z.object({
