@@ -58,22 +58,18 @@ const SetupScreen: React.FC<{
   const [gatewayToken, setGatewayToken] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const [isDemoConnecting, setIsDemoConnecting] = useState(false);
+
   const {
     callToolAsync: connectAsync,
     isPending: isConnecting,
   } = useCallTool<ConnectArgs>("connect-openclaw");
 
-  const handleConnect = useCallback(async () => {
-    if (!gatewayUrl.trim()) {
-      setError("Please enter a Gateway URL.");
-      return;
-    }
+  const isLoading = isConnecting || isDemoConnecting;
+
+  const doConnect = useCallback(async (args: ConnectArgs) => {
     setError(null);
-
     try {
-      const args: ConnectArgs = { gatewayUrl: gatewayUrl.trim() };
-      if (gatewayToken.trim()) args!.gatewayToken = gatewayToken.trim();
-
       const result = await connectAsync(args);
       if (result?.structuredContent) {
         const data = result.structuredContent as unknown as {
@@ -96,7 +92,26 @@ const SetupScreen: React.FC<{
     } catch {
       setError("Connection failed. Please check the URL and try again.");
     }
-  }, [gatewayUrl, gatewayToken, connectAsync, onConnected]);
+  }, [connectAsync, onConnected]);
+
+  const handleConnect = useCallback(async () => {
+    if (!gatewayUrl.trim()) {
+      setError("Please enter a Gateway URL.");
+      return;
+    }
+    const args: ConnectArgs = { gatewayUrl: gatewayUrl.trim() };
+    if (gatewayToken.trim()) args!.gatewayToken = gatewayToken.trim();
+    await doConnect(args);
+  }, [gatewayUrl, gatewayToken, doConnect]);
+
+  const handleDemoConnect = useCallback(async () => {
+    setIsDemoConnecting(true);
+    await doConnect({
+      gatewayUrl: "https://decor-rooms-routers-suspected.trycloudflare.com",
+      gatewayToken: "114c2610e5919ab9e288b766cf768ff69078312dee6d4c03",
+    });
+    setIsDemoConnecting(false);
+  }, [doConnect]);
 
   return (
     <div className="relative bg-surface-elevated border border-default rounded-2xl overflow-hidden">
@@ -110,54 +125,75 @@ const SetupScreen: React.FC<{
         </div>
 
         <h2 className="text-lg font-bold text-default mb-1">Connect to OpenClaw</h2>
-        <p className="text-sm text-secondary mb-6 max-w-sm">
-          Enter your OpenClaw Gateway URL to connect your dashboard to your agent cluster.
+        <p className="text-sm text-secondary mb-5 max-w-sm">
+          Try the demo or connect your own agent cluster.
         </p>
 
-        {/* Form */}
-        <div className="w-full max-w-md space-y-3">
-          <div className="text-left">
-            <label className="block text-xs font-medium text-secondary mb-1">
-              Gateway URL <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="url"
-              value={gatewayUrl}
-              onChange={(e) => setGatewayUrl(e.target.value)}
-              placeholder="https://your-gateway.example.com"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
-              disabled={isConnecting}
-            />
+        <div className="w-full max-w-md space-y-4">
+          {/* Demo button */}
+          <Button
+            color="primary"
+            size="lg"
+            variant="solid"
+            onClick={handleDemoConnect}
+            disabled={isLoading}
+            className="w-full"
+          >
+            {isDemoConnecting ? "Connecting..." : "Try Demo"}
+          </Button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-default" />
+            <span className="text-xs text-tertiary">or connect your own</span>
+            <div className="flex-1 border-t border-default" />
           </div>
 
-          <div className="text-left">
-            <label className="block text-xs font-medium text-secondary mb-1">
-              Auth Token <span className="text-tertiary">(optional)</span>
-            </label>
-            <input
-              type="password"
-              value={gatewayToken}
-              onChange={(e) => setGatewayToken(e.target.value)}
-              placeholder="Bearer token for authenticated gateways"
-              className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
-              disabled={isConnecting}
-            />
-          </div>
+          {/* Form */}
+          <div className="space-y-3">
+            <div className="text-left">
+              <label className="block text-xs font-medium text-secondary mb-1">
+                Gateway URL <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="url"
+                value={gatewayUrl}
+                onChange={(e) => setGatewayUrl(e.target.value)}
+                placeholder="https://your-gateway.example.com"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="text-left">
+              <label className="block text-xs font-medium text-secondary mb-1">
+                Auth Token <span className="text-tertiary">(optional)</span>
+              </label>
+              <input
+                type="password"
+                value={gatewayToken}
+                onChange={(e) => setGatewayToken(e.target.value)}
+                placeholder="Bearer token for authenticated gateways"
+                className="w-full px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500/60"
+                disabled={isLoading}
+              />
+            </div>
 
           {error && (
             <p className="text-xs text-red-400 text-left">{error}</p>
           )}
 
-          <Button
-            color="primary"
-            size="lg"
-            variant="solid"
-            onClick={handleConnect}
-            disabled={isConnecting || !gatewayUrl.trim()}
-            className="w-full mt-2"
-          >
-            {isConnecting ? "Connecting..." : "Connect"}
-          </Button>
+            <Button
+              color="secondary"
+              size="lg"
+              variant="outline"
+              onClick={handleConnect}
+              disabled={isLoading || !gatewayUrl.trim()}
+              className="w-full"
+            >
+              {isConnecting ? "Connecting..." : "Connect"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
