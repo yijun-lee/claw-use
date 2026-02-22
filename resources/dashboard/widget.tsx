@@ -231,10 +231,6 @@ const Dashboard: React.FC = () => {
     isPending: isSending,
   } = useCallTool<SendMessageArgs>("send-message");
 
-  const {
-    callToolAsync: deleteTaskAsync,
-  } = useCallTool<DeleteTaskArgs>("delete-task");
-
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [lastReply, setLastReply] = useState<string | null>(null);
@@ -268,19 +264,16 @@ const Dashboard: React.FC = () => {
   }, [refreshDashboardAsync, setState, props?.activeFilter]);
 
   const handleDeleteTask = useCallback(
-    async (taskId: string) => {
-      // Optimistic update
-      const updatedTasks = tasks.filter((t) => t.id !== taskId);
-      setState({ screen: "dashboard", tasks: updatedTasks, metrics, lastUpdated });
-
-      // Call server
-      try {
-        await deleteTaskAsync({ taskId });
-      } catch {
-        // ignore
-      }
+    (taskId: string) => {
+      const task = tasks.find((t) => t.id === taskId);
+      const name = task?.title || taskId;
+      sendFollowUpMessage(
+        `The user wants to remove the session "${name}" (key: ${taskId}). ` +
+        `Send a message to this session telling the agent to stop and close, ` +
+        `then refresh the dashboard.`
+      );
     },
-    [tasks, metrics, lastUpdated, setState, deleteTaskAsync]
+    [tasks, sendFollowUpMessage]
   );
 
   const handleMoveTask = useCallback(
