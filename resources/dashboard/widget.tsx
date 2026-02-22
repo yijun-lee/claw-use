@@ -265,7 +265,7 @@ const Dashboard: React.FC = () => {
   const handleDeleteTask = useCallback(
     (taskId: string) => {
       const updatedTasks = tasks.filter((t) => t.id !== taskId);
-      setState({ tasks: updatedTasks, metrics, lastUpdated });
+      setState({ screen: "dashboard", tasks: updatedTasks, metrics, lastUpdated });
     },
     [tasks, metrics, lastUpdated, setState]
   );
@@ -287,7 +287,7 @@ const Dashboard: React.FC = () => {
           ? { ...t, status: newStatus, updatedAt: new Date().toISOString() }
           : t
       );
-      setState({ tasks: updatedTasks, metrics, lastUpdated });
+      setState({ screen: "dashboard", tasks: updatedTasks, metrics, lastUpdated });
 
       // Server update
       try {
@@ -330,7 +330,7 @@ const Dashboard: React.FC = () => {
         return updated;
       });
 
-      setState({ tasks: updatedTasks, metrics, lastUpdated });
+      setState({ screen: "dashboard", tasks: updatedTasks, metrics, lastUpdated });
       setSelectedTask(null);
 
       // Server update

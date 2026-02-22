@@ -120,7 +120,7 @@ export const KanbanBoard: React.FC<TaskListProps> = ({
                       {onDeleteTask && (
                         <button
                           onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-red-500/10 text-tertiary hover:text-red-500"
+                          className="shrink-0 p-0.5 rounded hover:bg-red-500/10 text-tertiary hover:text-red-500"
                           title="Remove"
                         >
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
