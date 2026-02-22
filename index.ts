@@ -6,18 +6,30 @@ import type { GatewayOverrides } from "./lib/openclaw-client.js";
 const client = new OpenClawClient();
 const baseUrl = process.env.MCP_URL || "http://localhost:3000";
 
-// In-memory connection store — each user enters their own credentials via setup screen
+// In-memory connection store
 let currentConnection: GatewayOverrides | null = null;
 
 function getConnection(): GatewayOverrides | null {
   return currentConnection;
 }
 
+const NOT_CONNECTED =
+  "Not connected to an OpenClaw gateway. " +
+  "Ask the user for their Gateway URL (and optional auth token), " +
+  "then call connect-openclaw with those values.";
+
 const server = new MCPServer({
   name: "claw-use",
   title: "OpenClaw Dashboard",
   version: "1.0.0",
-  description: "OpenClaw agent task dashboard — manage tasks, monitor metrics, and control agent workflows",
+  description:
+    "OpenClaw command center — monitor AI agent sessions, view token usage and metrics, " +
+    "send messages to agents, and browse conversation history. " +
+    "IMPORTANT: The user must first connect to their OpenClaw gateway by providing a Gateway URL " +
+    "and optional auth token. Call connect-openclaw before using any other tool. " +
+    "After connecting, use get-dashboard to show the visual dashboard, list-sessions to see " +
+    "available sessions, send-message to interact with agents, and get-session-history to " +
+    "review conversations.",
   baseUrl,
   favicon: "favicon.ico",
   websiteUrl: "https://openclaw.io",
@@ -31,18 +43,66 @@ const server = new MCPServer({
 });
 
 // ---------------------------------------------------------------------------
-// Tool 1: get-dashboard — renders the dashboard widget (or setup screen)
+// connect-openclaw — MUST be called first
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "connect-openclaw",
+    description:
+      "Connect to an OpenClaw gateway. This MUST be called before any other tool. " +
+      "Ask the user for their Gateway URL and optional auth token. " +
+      "On success, returns the full dashboard data (sessions, metrics).",
+    schema: z.object({
+      gatewayUrl: z
+        .string()
+        .url()
+        .describe("The OpenClaw Gateway URL (e.g. https://my-gateway.trycloudflare.com)"),
+      gatewayToken: z
+        .string()
+        .optional()
+        .describe("Bearer token for authenticated gateways. Ask the user if their gateway requires one."),
+    }),
+  },
+  async ({ gatewayUrl, gatewayToken }) => {
+    currentConnection = { gatewayUrl, gatewayToken };
+
+    const data = await client.getDashboard(currentConnection);
+
+    return object({
+      success: true,
+      tasks: data.tasks,
+      metrics: data.metrics,
+      lastUpdated: data.lastUpdated,
+    });
+  }
+);
+
+// ---------------------------------------------------------------------------
+// get-dashboard — visual dashboard widget
 // ---------------------------------------------------------------------------
 
 server.tool(
   {
     name: "get-dashboard",
-    description: "Display the OpenClaw task dashboard with a kanban board and metrics summary.",
+    description:
+      "Show the OpenClaw monitoring dashboard as a visual widget. " +
+      "Displays all agent sessions grouped by status (Active, Heartbeat, Scheduled, Chat, Idle), " +
+      "token usage metrics, context utilization, success rate, and channel breakdown. " +
+      "Each session shows its last message preview and message count. " +
+      "If not connected, instructs the user to provide their gateway credentials.",
     schema: z.object({
       filter: z
         .enum(["all", "heartbeat", "backlog", "todo", "in-progress", "done"])
         .optional()
-        .describe("Filter tasks by a specific status"),
+        .describe(
+          "Filter sessions by category: " +
+          "'in-progress' = Active (recent activity), " +
+          "'heartbeat' = Heartbeat sessions, " +
+          "'backlog' = Scheduled/Cron jobs, " +
+          "'todo' = Chat (Discord/Webchat), " +
+          "'done' = Idle sessions"
+        ),
     }),
     widget: {
       name: "dashboard",
@@ -55,10 +115,8 @@ server.tool(
     const conn = getConnection();
     if (!conn) {
       return widget({
-        props: {
-          screen: "setup" as const,
-        },
-        output: text("Please configure your OpenClaw Gateway URL to get started."),
+        props: { screen: "setup" as const },
+        output: text(NOT_CONNECTED),
       });
     }
 
@@ -77,9 +135,14 @@ server.tool(
       },
       output: text(
         [
-          `Dashboard loaded (${tasks.length} tasks)`,
-          `Heartbeat: ${byStatus("heartbeat")} | Backlog: ${byStatus("backlog")} | To-Do: ${byStatus("todo")} | In Progress: ${byStatus("in-progress")} | Done: ${byStatus("done")}`,
-          `Tokens: ${metrics.totalTokens.toLocaleString()} ($${metrics.estimatedCostUSD.toFixed(2)}) | Success: ${metrics.successRate}% | Avg Response: ${metrics.avgResponseTimeMs}ms`,
+          `Dashboard loaded — ${tasks.length} sessions across ${new Set(tasks.map((t) => t.assignee)).size} channels`,
+          `Active: ${byStatus("in-progress")} | Heartbeat: ${byStatus("heartbeat")} | Scheduled: ${byStatus("backlog")} | Chat: ${byStatus("todo")} | Idle: ${byStatus("done")}`,
+          `Total tokens: ${metrics.totalTokens.toLocaleString()} (~$${metrics.estimatedCostUSD.toFixed(2)}) | Success: ${metrics.successRate}% | Context: ${metrics.contextUtilization ?? 0}%`,
+          "",
+          "Sessions:",
+          ...tasks.map((t) =>
+            `  [${t.status}] ${t.title} — ${t.description} (${t.assignee}, ${t.updatedAt})`
+          ),
         ].join("\n")
       ),
     });
@@ -87,146 +150,131 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
-// Tool 2: connect-openclaw — save gateway URL in memory and return dashboard
+// send-message — interact with an agent session
 // ---------------------------------------------------------------------------
 
 server.tool(
   {
-    name: "connect-openclaw",
-    description: "Save the OpenClaw Gateway connection settings and load the dashboard.",
+    name: "send-message",
+    description:
+      "Send a message to a specific OpenClaw agent session and receive the agent's reply. " +
+      "Use this to give instructions, ask questions, or trigger actions. " +
+      "You need the session key — call list-sessions first to find available session keys. " +
+      "Common session keys: 'agent:main:main' for the main webchat agent. " +
+      "The agent will process the message and return a reply.",
     schema: z.object({
-      gatewayUrl: z.string().url().describe("OpenClaw Gateway URL"),
-      gatewayToken: z.string().optional().describe("Optional auth token for the gateway"),
+      sessionKey: z
+        .string()
+        .describe(
+          "Session key identifying which agent session to message. " +
+          "Format: 'agent:main:<session-id>'. Use list-sessions to find valid keys."
+        ),
+      message: z
+        .string()
+        .describe("The message to send. Can be a question, instruction, or task for the agent."),
     }),
   },
-  async ({ gatewayUrl, gatewayToken }) => {
-    currentConnection = { gatewayUrl, gatewayToken };
-
-    const data = await client.getDashboard(currentConnection);
-
-    return object({
-      success: true,
-      tasks: data.tasks,
-      metrics: data.metrics,
-      lastUpdated: data.lastUpdated,
-    });
-  }
-);
-
-// ---------------------------------------------------------------------------
-// Tool 3: update-task — backend tool for modifying tasks
-// ---------------------------------------------------------------------------
-
-server.tool(
-  {
-    name: "update-task",
-    description: "Update a task's status, title, description, assignee, priority, or add feedback.",
-    schema: z.object({
-      taskId: z.string().describe("ID of the task to update"),
-      status: z
-        .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
-        .optional()
-        .describe("New status"),
-      title: z.string().optional().describe("New title"),
-      description: z.string().optional().describe("New description"),
-      feedback: z.string().optional().describe("Feedback message to add"),
-      assignee: z.string().optional().describe("New assignee"),
-      priority: z
-        .enum(["low", "medium", "high", "critical"])
-        .optional()
-        .describe("New priority"),
-    }),
-  },
-  async (params) => {
+  async ({ sessionKey, message }) => {
     const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
-    const updated = await client.updateTask(conn, params);
-    return object({
-      success: true,
-      task: updated,
-    });
+    if (!conn) return text(NOT_CONNECTED);
+    const result = await client.sendMessage(conn, sessionKey, message);
+    return object(result);
   }
 );
 
 // ---------------------------------------------------------------------------
-// Tool 4: create-task — backend tool for creating new tasks
+// list-sessions — discover available sessions
 // ---------------------------------------------------------------------------
 
 server.tool(
   {
-    name: "create-task",
-    description: "Create a new task.",
-    schema: z.object({
-      title: z.string().describe("Task title"),
-      description: z.string().optional().describe("Task description"),
-      status: z
-        .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
-        .optional()
-        .describe("Initial status (default: backlog)"),
-      priority: z
-        .enum(["low", "medium", "high", "critical"])
-        .optional()
-        .describe("Priority (default: medium)"),
-      assignee: z.string().optional().describe("Assignee"),
-    }),
-  },
-  async (params) => {
-    const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
-    const created = await client.createTask(conn, params);
-    return object({
-      success: true,
-      task: created,
-    });
-  }
-);
-
-// ---------------------------------------------------------------------------
-// Tool 5: get-metrics — backend tool for metrics analysis
-// ---------------------------------------------------------------------------
-
-server.tool(
-  {
-    name: "get-metrics",
-    description: "Retrieve agent performance metrics including token usage, success rate, and response time.",
+    name: "list-sessions",
+    description:
+      "List all active OpenClaw agent sessions with their keys, channels, models, and token usage. " +
+      "Use this to discover which sessions are available before sending messages. " +
+      "Each session has a unique key (e.g. 'agent:main:main') that you pass to send-message.",
     schema: z.object({}),
     annotations: { readOnlyHint: true },
   },
   async () => {
     const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
+    if (!conn) return text(NOT_CONNECTED);
+    const sessions = await client.listSessions(conn);
+    return object({ sessions });
+  }
+);
+
+// ---------------------------------------------------------------------------
+// get-session-history — view conversation in a session
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "get-session-history",
+    description:
+      "Retrieve the recent conversation history of a specific OpenClaw session. " +
+      "Shows the last N messages (default 10) with role, content, and timestamps. " +
+      "Useful for understanding what an agent has been doing or reviewing past interactions.",
+    schema: z.object({
+      sessionKey: z
+        .string()
+        .describe("Session key (e.g. 'agent:main:main'). Use list-sessions to find keys."),
+      limit: z
+        .number()
+        .optional()
+        .describe("Number of recent messages to return. Default: 10, max recommended: 20."),
+    }),
+    annotations: { readOnlyHint: true },
+  },
+  async ({ sessionKey, limit }) => {
+    const conn = getConnection();
+    if (!conn) return text(NOT_CONNECTED);
+    const history = await client.getSessionHistory(conn, sessionKey, limit ?? 10);
+    return object(history);
+  }
+);
+
+// ---------------------------------------------------------------------------
+// get-metrics — detailed metrics
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "get-metrics",
+    description:
+      "Get detailed performance metrics: total token usage with estimated cost, " +
+      "context window utilization percentage, success rate, session count, " +
+      "and per-channel token breakdown (discord, webchat, etc.).",
+    schema: z.object({}),
+    annotations: { readOnlyHint: true },
+  },
+  async () => {
+    const conn = getConnection();
+    if (!conn) return text(NOT_CONNECTED);
     const metrics = await client.getMetrics(conn);
     return object({ ...metrics });
   }
 );
 
 // ---------------------------------------------------------------------------
-// Tool 6: refresh-dashboard — widget-callable refresh
+// refresh-dashboard — widget-internal refresh
 // ---------------------------------------------------------------------------
 
 server.tool(
   {
     name: "refresh-dashboard",
-    description: "Refresh dashboard data. Called from the widget.",
+    description: "Refresh the dashboard widget data. Called internally by the widget UI.",
     schema: z.object({
       filter: z
         .enum(["all", "heartbeat", "backlog", "todo", "in-progress", "done"])
         .optional()
-        .describe("Filter status"),
+        .describe("Filter by session category"),
     }),
     annotations: { readOnlyHint: true },
   },
   async ({ filter }) => {
     const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
+    if (!conn) return text(NOT_CONNECTED);
     const data = await client.getDashboard(conn, filter);
     return object({
       tasks: data.tasks,
@@ -237,77 +285,68 @@ server.tool(
 );
 
 // ---------------------------------------------------------------------------
-// Tool 7: send-message — send a message to an OpenClaw session and get reply
+// update-task — modify session metadata
 // ---------------------------------------------------------------------------
 
 server.tool(
   {
-    name: "send-message",
+    name: "update-task",
     description:
-      "Send a message to an OpenClaw agent session and receive the agent's reply. " +
-      "Use this to give instructions, ask questions, or trigger actions on a running agent. " +
-      "Provide a sessionKey (e.g. 'agent:main:main') to target a specific session.",
+      "Send an update command to the OpenClaw agent for a specific session. " +
+      "Can change status, add feedback, or update metadata.",
     schema: z.object({
-      sessionKey: z.string().describe("Session key to send the message to (e.g. 'agent:main:main')"),
-      message: z.string().describe("The message to send to the agent"),
+      taskId: z.string().describe("Session key / task ID to update"),
+      status: z
+        .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
+        .optional()
+        .describe("New status category"),
+      title: z.string().optional().describe("New title"),
+      description: z.string().optional().describe("New description"),
+      feedback: z.string().optional().describe("Feedback message to send to the agent"),
+      assignee: z.string().optional().describe("New assignee/channel"),
+      priority: z
+        .enum(["low", "medium", "high", "critical"])
+        .optional()
+        .describe("New priority level"),
     }),
   },
-  async ({ sessionKey, message }) => {
+  async (params) => {
     const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
-    const result = await client.sendMessage(conn, sessionKey, message);
-    return object(result);
+    if (!conn) return text(NOT_CONNECTED);
+    const updated = await client.updateTask(conn, params);
+    return object({ success: true, task: updated });
   }
 );
 
 // ---------------------------------------------------------------------------
-// Tool 8: list-sessions — quick list of available sessions for reference
+// create-task — create a new task via agent
 // ---------------------------------------------------------------------------
 
 server.tool(
   {
-    name: "list-sessions",
+    name: "create-task",
     description:
-      "List all active OpenClaw sessions with their keys, channels, and token usage. " +
-      "Use this to find session keys before sending messages.",
-    schema: z.object({}),
-    annotations: { readOnlyHint: true },
-  },
-  async () => {
-    const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
-    const sessions = await client.listSessions(conn);
-    return object({ sessions });
-  }
-);
-
-// ---------------------------------------------------------------------------
-// Tool 9: get-session-history — get conversation history for a session
-// ---------------------------------------------------------------------------
-
-server.tool(
-  {
-    name: "get-session-history",
-    description:
-      "Get the conversation history of a specific OpenClaw session. " +
-      "Returns the last N messages (default 10) for context.",
+      "Create a new task by sending a creation message to the OpenClaw agent. " +
+      "The agent will process and schedule the task.",
     schema: z.object({
-      sessionKey: z.string().describe("Session key (e.g. 'agent:main:main')"),
-      limit: z.number().optional().describe("Number of recent messages to return (default 10)"),
+      title: z.string().describe("Task title — what needs to be done"),
+      description: z.string().optional().describe("Detailed task description"),
+      status: z
+        .enum(["heartbeat", "backlog", "todo", "in-progress", "done"])
+        .optional()
+        .describe("Initial status (default: backlog/scheduled)"),
+      priority: z
+        .enum(["low", "medium", "high", "critical"])
+        .optional()
+        .describe("Task priority (default: medium)"),
+      assignee: z.string().optional().describe("Assign to a specific channel/agent"),
     }),
-    annotations: { readOnlyHint: true },
   },
-  async ({ sessionKey, limit }) => {
+  async (params) => {
     const conn = getConnection();
-    if (!conn) {
-      return text("Gateway not configured. Please use connect-openclaw first.");
-    }
-    const history = await client.getSessionHistory(conn, sessionKey, limit ?? 10);
-    return object(history);
+    if (!conn) return text(NOT_CONNECTED);
+    const created = await client.createTask(conn, params);
+    return object({ success: true, task: created });
   }
 );
 
