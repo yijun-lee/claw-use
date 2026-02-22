@@ -164,7 +164,12 @@ server.tool(
       "You need the session key — call list-sessions first to find available session keys. " +
       "Common session keys: 'agent:main:main' for the main webchat agent. " +
       "The agent will process the message and return a reply. " +
-      "IMPORTANT: After this tool completes, you MUST call get-dashboard to refresh and display the updated visual dashboard widget.",
+      "Returns the updated dashboard widget automatically.",
+    widget: {
+      name: "dashboard",
+      invoking: "Sending message...",
+      invoked: "Message sent",
+    },
     schema: z.object({
       sessionKey: z
         .string()
@@ -181,7 +186,22 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const result = await client.sendMessage(conn, sessionKey, message);
-    return object(result);
+
+    // Return updated dashboard widget with agent reply in text output
+    const data = await client.getDashboard(conn);
+    const { metrics, tasks } = data;
+    const reply = (result.reply as string) || "Message sent.";
+
+    return widget({
+      props: {
+        screen: "dashboard" as const,
+        tasks,
+        metrics,
+        lastUpdated: data.lastUpdated,
+        activeFilter: "all",
+      },
+      output: text(`Agent reply: ${reply}`),
+    });
   }
 );
 
@@ -318,7 +338,18 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const updated = await client.updateTask(conn, params);
-    return object({ success: true, task: updated });
+
+    const data = await client.getDashboard(conn);
+    return widget({
+      props: {
+        screen: "dashboard" as const,
+        tasks: data.tasks,
+        metrics: data.metrics,
+        lastUpdated: data.lastUpdated,
+        activeFilter: "all",
+      },
+      output: text(`Task ${params.taskId} updated.`),
+    });
   }
 );
 
@@ -332,7 +363,7 @@ server.tool(
     description:
       "Create a new task by sending a creation message to the OpenClaw agent. " +
       "The agent will process and schedule the task. " +
-      "IMPORTANT: After this tool completes, you MUST call get-dashboard to refresh and display the updated visual dashboard widget.",
+      "Returns the updated dashboard widget automatically.",
     schema: z.object({
       title: z.string().describe("Task title — what needs to be done"),
       description: z.string().optional().describe("Detailed task description"),
@@ -346,12 +377,28 @@ server.tool(
         .describe("Task priority (default: medium)"),
       assignee: z.string().optional().describe("Assign to a specific channel/agent"),
     }),
+    widget: {
+      name: "dashboard",
+      invoking: "Creating task...",
+      invoked: "Task created",
+    },
   },
   async (params) => {
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const created = await client.createTask(conn, params);
-    return object({ success: true, task: created });
+
+    const data = await client.getDashboard(conn);
+    return widget({
+      props: {
+        screen: "dashboard" as const,
+        tasks: data.tasks,
+        metrics: data.metrics,
+        lastUpdated: data.lastUpdated,
+        activeFilter: "all",
+      },
+      output: text(`Task "${params.title}" created. Agent reply: ${JSON.stringify(created)}`),
+    });
   }
 );
 
