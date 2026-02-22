@@ -27,9 +27,11 @@ const server = new MCPServer({
     "send messages to agents, and browse conversation history. " +
     "IMPORTANT: The user must first connect to their OpenClaw gateway by providing a Gateway URL " +
     "and optional auth token. Call connect-openclaw before using any other tool. " +
-    "After connecting, use get-dashboard to show the visual dashboard, list-sessions to see " +
-    "available sessions, send-message to interact with agents, and get-session-history to " +
-    "review conversations.",
+    "After connecting, use get-dashboard to show the visual dashboard. " +
+    "CRITICAL RULE: After ANY action tool (send-message, create-task, update-task), " +
+    "you MUST immediately call get-dashboard to refresh and display the updated dashboard widget. " +
+    "Other tools: list-sessions to see available sessions, send-message to interact with agents, " +
+    "get-session-history to review conversations.",
   baseUrl,
   favicon: "favicon.ico",
   websiteUrl: "https://openclaw.io",
@@ -162,8 +164,7 @@ server.tool(
       "You need the session key — call list-sessions first to find available session keys. " +
       "Common session keys: 'agent:main:main' for the main webchat agent. " +
       "The agent will process the message and return a reply. " +
-      "The response includes updated dashboard data. " +
-      "IMPORTANT: After using send-message, call get-dashboard to update the visual widget.",
+      "IMPORTANT: After this tool completes, you MUST call get-dashboard to refresh and display the updated visual dashboard widget.",
     schema: z.object({
       sessionKey: z
         .string()
@@ -180,18 +181,7 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const result = await client.sendMessage(conn, sessionKey, message);
-
-    // Fetch updated dashboard so the widget refreshes
-    const dashboard = await client.getDashboard(conn);
-
-    return object({
-      ...result,
-      dashboard: {
-        tasks: dashboard.tasks,
-        metrics: dashboard.metrics,
-        lastUpdated: dashboard.lastUpdated,
-      },
-    });
+    return object(result);
   }
 );
 
@@ -306,7 +296,8 @@ server.tool(
     name: "update-task",
     description:
       "Send an update command to the OpenClaw agent for a specific session. " +
-      "Can change status, add feedback, or update metadata.",
+      "Can change status, add feedback, or update metadata. " +
+      "IMPORTANT: After this tool completes, you MUST call get-dashboard to refresh and display the updated visual dashboard widget.",
     schema: z.object({
       taskId: z.string().describe("Session key / task ID to update"),
       status: z
@@ -327,8 +318,7 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const updated = await client.updateTask(conn, params);
-    const dashboard = await client.getDashboard(conn);
-    return object({ success: true, task: updated, dashboard });
+    return object({ success: true, task: updated });
   }
 );
 
@@ -341,7 +331,8 @@ server.tool(
     name: "create-task",
     description:
       "Create a new task by sending a creation message to the OpenClaw agent. " +
-      "The agent will process and schedule the task.",
+      "The agent will process and schedule the task. " +
+      "IMPORTANT: After this tool completes, you MUST call get-dashboard to refresh and display the updated visual dashboard widget.",
     schema: z.object({
       title: z.string().describe("Task title — what needs to be done"),
       description: z.string().optional().describe("Detailed task description"),
@@ -360,8 +351,7 @@ server.tool(
     const conn = getConnection();
     if (!conn) return text(NOT_CONNECTED);
     const created = await client.createTask(conn, params);
-    const dashboard = await client.getDashboard(conn);
-    return object({ success: true, task: created, dashboard });
+    return object({ success: true, task: created });
   }
 );
 
