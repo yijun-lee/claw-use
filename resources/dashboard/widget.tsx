@@ -262,6 +262,14 @@ const Dashboard: React.FC = () => {
     }
   }, [refreshDashboardAsync, setState, props?.activeFilter]);
 
+  const handleDeleteTask = useCallback(
+    (taskId: string) => {
+      const updatedTasks = tasks.filter((t) => t.id !== taskId);
+      setState({ tasks: updatedTasks, metrics, lastUpdated });
+    },
+    [tasks, metrics, lastUpdated, setState]
+  );
+
   const handleMoveTask = useCallback(
     async (taskId: string, direction: "left" | "right") => {
       const task = tasks.find((t) => t.id === taskId);
@@ -503,6 +511,7 @@ const Dashboard: React.FC = () => {
               isExpanded={isExpanded}
               onMoveTask={handleMoveTask}
               onSelectTask={setSelectedTask}
+              onDeleteTask={handleDeleteTask}
             />
           </div>
 
