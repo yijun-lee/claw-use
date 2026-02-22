@@ -355,6 +355,28 @@ server.tool(
   }
 );
 
+// ---------------------------------------------------------------------------
+// delete-task — remove a task from the dashboard view
+// ---------------------------------------------------------------------------
+
+server.tool(
+  {
+    name: "delete-task",
+    description:
+      "Remove a task/session from the dashboard view. " +
+      "This hides it from the current dashboard display. " +
+      "IMPORTANT: After this tool completes, you MUST call get-dashboard to refresh the widget.",
+    schema: z.object({
+      taskId: z.string().describe("The session key / task ID to remove"),
+    }),
+  },
+  async ({ taskId }) => {
+    const conn = getConnection();
+    if (!conn) return text(NOT_CONNECTED);
+    return object({ success: true, deletedTaskId: taskId });
+  }
+);
+
 server.listen().then(() => {
   console.log("OpenClaw Dashboard server running");
 });

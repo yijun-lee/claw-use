@@ -48,6 +48,7 @@ type RefreshArgs = { filter?: string } | null;
 type UpdateArgs = Record<string, unknown> | null;
 type ConnectArgs = { gatewayUrl: string; gatewayToken?: string } | null;
 type SendMessageArgs = { sessionKey: string; message: string } | null;
+type DeleteTaskArgs = { taskId: string } | null;
 // ---------------------------------------------------------------------------
 // Setup Screen — shown when no Gateway URL is configured
 // ---------------------------------------------------------------------------
@@ -230,6 +231,10 @@ const Dashboard: React.FC = () => {
     isPending: isSending,
   } = useCallTool<SendMessageArgs>("send-message");
 
+  const {
+    callToolAsync: deleteTaskAsync,
+  } = useCallTool<DeleteTaskArgs>("delete-task");
+
   const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [lastReply, setLastReply] = useState<string | null>(null);
@@ -263,11 +268,19 @@ const Dashboard: React.FC = () => {
   }, [refreshDashboardAsync, setState, props?.activeFilter]);
 
   const handleDeleteTask = useCallback(
-    (taskId: string) => {
+    async (taskId: string) => {
+      // Optimistic update
       const updatedTasks = tasks.filter((t) => t.id !== taskId);
       setState({ screen: "dashboard", tasks: updatedTasks, metrics, lastUpdated });
+
+      // Call server
+      try {
+        await deleteTaskAsync({ taskId });
+      } catch {
+        // ignore
+      }
     },
-    [tasks, metrics, lastUpdated, setState]
+    [tasks, metrics, lastUpdated, setState, deleteTaskAsync]
   );
 
   const handleMoveTask = useCallback(
