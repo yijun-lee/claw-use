@@ -4,6 +4,8 @@
 >
 > claw-use is the only place where you see your agents, the AI thinks about what it sees, and you can act on it — all in one conversation.
 
+<img src="claw-use.jpeg">
+
 A **conversational command center** for [OpenClaw](https://openclaw.io) AI agent clusters, built as an MCP App. Monitor sessions, supervise running tasks, steer agent behavior mid-execution, and dispatch new work — all through natural conversation in ChatGPT or Claude. **No tab switching. No re-explaining.**
 
 **Live Demo:** [`https://late-river-13b96.run.mcp-use.com/mcp`](https://inspector.manufact.com/inspector?autoConnect=https%3A%2F%2Flate-river-13b96.run.mcp-use.com%2Fmcp)
