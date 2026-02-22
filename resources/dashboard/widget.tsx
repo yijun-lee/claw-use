@@ -506,36 +506,6 @@ const Dashboard: React.FC = () => {
             />
           </div>
 
-          {/* Message bar */}
-          <div className="px-4 pb-3">
-            {lastReply && (
-              <div className="mb-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-default">
-                <span className="text-emerald-500 font-medium">Agent: </span>
-                {lastReply}
-              </div>
-            )}
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && !isSending && handleSendMessage()}
-                placeholder="Send a message to agent..."
-                className="flex-1 px-3 py-2 text-sm rounded-lg border border-default bg-surface text-default placeholder:text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-                disabled={isSending}
-              />
-              <Button
-                color="primary"
-                size="lg"
-                variant="solid"
-                onClick={handleSendMessage}
-                disabled={isSending || !messageInput.trim()}
-              >
-                {isSending ? "..." : "Send"}
-              </Button>
-            </div>
-          </div>
-
           {/* Task detail modal */}
           {selectedTask && (
             <TaskDetailModal
