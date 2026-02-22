@@ -1,4 +1,4 @@
-# OpenClaw Dashboard — AI Agent Command Center as an MCP App
+# claw-use — AI Agent Command Center as an MCP App
 
 A **conversational command center** for [OpenClaw](https://openclaw.io) AI agent clusters, built as an MCP App. Monitor sessions, track token usage, and **send commands to running agents** — all through natural conversation in ChatGPT or Claude.
 
@@ -31,7 +31,7 @@ This project **couldn't exist without the MCP Apps paradigm**. Traditional dashb
 ```
 User (ChatGPT/Claude)
     ↕ MCP Protocol
-OpenClaw Dashboard (MCP Server on Manufact Cloud)
+claw-use (MCP Server on Manufact Cloud)
     ↕ HTTP REST API
 OpenClaw Gateway (user's agent cluster)
     ↕ manages
@@ -88,10 +88,10 @@ Open the [Inspector](https://inspector.manufact.com/inspector?autoConnect=https%
 ### Connect to ChatGPT
 
 1. Go to [ChatGPT Apps Settings](https://chatgpt.com/apps#settings/Connectors) → Create App
-2. Name: `OpenClaw Dashboard`
+2. Name: `claw-use`
 3. URL: `https://late-river-13b96.run.mcp-use.com/mcp`
 4. Auth: No Authentication
-5. Type `@OpenClaw Dashboard` in any chat
+5. Type `@claw-use` in any chat
 
 ### Run locally
 
